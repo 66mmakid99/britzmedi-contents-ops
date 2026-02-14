@@ -186,10 +186,11 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       if (Object.keys(result.results || {}).length > 0) {
         setReviewing(true);
         try {
+          const sourceForReview = [finalTopicPrompt, extraContext].filter(Boolean).join('\n\n');
           const reviews = await reviewMultiChannel({
             contentByChannel: result.results,
             channelIds: Object.keys(result.results),
-            userSourceText: finalTopicPrompt,
+            userSourceText: sourceForReview,
             apiKey,
           });
           setReviewResults(reviews);
@@ -766,6 +767,7 @@ function ReviewSummary({ reviewResults, reviewing, selectedChannels }) {
   let totalYellow = 0;
   let totalChannels = 0;
   let passedChannels = 0;
+  const factRatios = [];
 
   for (const ch of selectedChannels) {
     const issues = reviewResults[ch];
@@ -776,6 +778,8 @@ function ReviewSummary({ reviewResults, reviewing, selectedChannels }) {
     totalRed += reds;
     totalYellow += yellows;
     if (reds === 0 && yellows === 0) passedChannels++;
+    const factItem = issues.find((i) => i.category === '팩트 비율');
+    if (factItem) factRatios.push({ ch, message: factItem.message, severity: factItem.severity });
   }
 
   if (totalChannels === 0) return null;
@@ -787,7 +791,7 @@ function ReviewSummary({ reviewResults, reviewing, selectedChannels }) {
       totalRed > 0 ? 'bg-danger/5 border-danger/20' : totalYellow > 0 ? 'bg-warning/5 border-warning/20' : 'bg-success/5 border-success/20'
     }`}>
       <div className="text-[12px] font-bold mb-2">AI 검수 결과</div>
-      <div className="flex items-center gap-4 text-[13px]">
+      <div className="flex items-center gap-4 text-[13px] flex-wrap">
         {totalRed > 0 && (
           <span className="font-bold text-danger">🔴 {totalRed}건 (반드시 수정)</span>
         )}
@@ -798,6 +802,15 @@ function ReviewSummary({ reviewResults, reviewing, selectedChannels }) {
           <span className="font-bold text-success">✅ 전체 통과 ({passedChannels}채널)</span>
         )}
       </div>
+      {factRatios.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {factRatios.map((fr, i) => (
+            <div key={i} className={`text-[12px] font-semibold ${fr.severity === 'red' ? 'text-danger' : 'text-warning'}`}>
+              📊 {fr.message}
+            </div>
+          ))}
+        </div>
+      )}
       {totalRed > 0 && (
         <div className="text-[11px] text-danger mt-2">🔴 필수 수정 사항이 있습니다. 수정 후 내보내기가 가능합니다.</div>
       )}
