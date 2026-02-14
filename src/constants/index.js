@@ -21,6 +21,7 @@ export const CHANNELS = [
   { id: 'newsletter', label: '뉴스레터', track: 'B' },
   { id: 'naver', label: '네이버 블로그', track: 'B' },
   { id: 'kakao', label: '카카오톡', track: 'B' },
+  { id: 'pressrelease', label: '보도자료', track: '-' },
 ];
 
 export const CONTENT_PILLARS = {
@@ -42,12 +43,12 @@ export const CONTENT_PILLARS = {
 
 // Demo data for initial display
 export const DEMO_CONTENTS = [
-  { id: 1, title: 'Toroidal RF vs Monopolar RF: Clinical Comparison', track: 'A', pillar: 'A1', stage: 'published', channels: { blog: true, linkedin: true, instagram: true }, date: '2026-02-03' },
-  { id: 2, title: 'TORR RF: FDA 승인 기술의 피부 리프팅 원리', track: 'A', pillar: 'A2', stage: 'ready', channels: { blog: true, linkedin: false, instagram: true }, date: '2026-02-10' },
+  { id: 1, title: 'TOROIDAL 고주파 vs 기존 고주파 기술: 임상 비교', track: 'A', pillar: 'A1', stage: 'published', channels: { blog: true, linkedin: true, instagram: true }, date: '2026-02-03' },
+  { id: 2, title: 'TORR RF: TOROIDAL 고주파 기술의 과학적 근거', track: 'A', pillar: 'A2', stage: 'ready', channels: { blog: true, linkedin: false, instagram: true }, date: '2026-02-10' },
   { id: 3, title: '피부과 선택 기준 설문 리포트 ① - 충격 데이터 5선', track: 'B', pillar: 'B1', stage: 'review', channels: { newsletter: true, naver: true, kakao: true }, date: '2026-02-12' },
-  { id: 4, title: '2026 에스테틱 장비 시장 트렌드 분석', track: 'A', pillar: 'A3', stage: 'draft', channels: {}, date: '2026-02-17' },
+  { id: 4, title: '2026 메디컬 에스테틱 EBD 시장 트렌드 분석', track: 'A', pillar: 'A3', stage: 'draft', channels: {}, date: '2026-02-17' },
   { id: 5, title: '의료기기 광고 심의 체크리스트 - 원장님 필독', track: 'B', pillar: 'B3', stage: 'idea', channels: {}, date: '2026-02-19' },
   { id: 6, title: '효과 없는 시술 vs 확실한 시술: 환자 이탈 데이터', track: 'B', pillar: 'B1', stage: 'draft', channels: { newsletter: false, naver: true, kakao: false }, date: '2026-02-14' },
-  { id: 7, title: 'RF Skin Tightening: What Clinics Need to Know', track: 'A', pillar: 'A1', stage: 'idea', channels: {}, date: '2026-02-24' },
+  { id: 7, title: 'TOROIDAL 고주파 에너지 전달과 콜라겐 리모델링 메커니즘', track: 'A', pillar: 'A1', stage: 'idea', channels: {}, date: '2026-02-24' },
   { id: 8, title: '피부과 장비 ROI 분석: 가성비 24.8%의 의미', track: 'B', pillar: 'B4', stage: 'idea', channels: {}, date: '2026-02-26' },
 ];

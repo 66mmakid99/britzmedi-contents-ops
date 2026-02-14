@@ -1,252 +1,393 @@
 import { useState } from 'react';
-import { CONTENT_PILLARS } from '../../constants';
-import { generateDraft } from '../../lib/claude';
+import { PILLAR_PRESETS, CHANNEL_CONFIGS } from '../../constants/prompts';
+import { generateMultiChannel } from '../../lib/claude';
+
+const STEPS = ['필라 선택', '주제 선택', '채널 선택', '추가 설정'];
+const CHANNEL_IDS = Object.keys(CHANNEL_CONFIGS);
 
 export default function Create({ onAdd, apiKey, setApiKey }) {
-  const [form, setForm] = useState({
-    track: 'A',
-    pillar: 'A1',
-    title: '',
-    date: '',
-    brief: '',
-  });
-  const [draft, setDraft] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [step, setStep] = useState(0);
+  const [pillarId, setPillarId] = useState('');
+  const [topicId, setTopicId] = useState('');
+  const [customTopic, setCustomTopic] = useState('');
+  const [selectedChannels, setSelectedChannels] = useState([]);
+  const [publishDate, setPublishDate] = useState('');
+  const [extraContext, setExtraContext] = useState('');
   const [showKey, setShowKey] = useState(false);
 
-  const pillars = CONTENT_PILLARS[form.track] || [];
+  // Generation state
+  const [loading, setLoading] = useState(false);
+  const [genResults, setGenResults] = useState(null); // { results: {ch: text}, errors: {ch: msg} }
+  const [activeResultTab, setActiveResultTab] = useState('');
+  const [registered, setRegistered] = useState(false);
 
-  const handleTrackChange = (track) => {
-    const firstPillar = CONTENT_PILLARS[track]?.[0]?.id || '';
-    setForm({ ...form, track, pillar: firstPillar });
+  const pillar = PILLAR_PRESETS[pillarId];
+  const topic = pillar?.topics.find((t) => t.id === topicId);
+  const isCustomTopic = topic && !topic.prompt;
+  const finalTopicPrompt = isCustomTopic ? customTopic : (topic?.prompt || '');
+
+  const canProceed = () => {
+    if (step === 0) return !!pillarId;
+    if (step === 1) return !!topicId && (!isCustomTopic || customTopic.trim());
+    if (step === 2) return selectedChannels.length > 0;
+    return true;
   };
 
   const handleGenerate = async () => {
-    if (!apiKey) {
-      setError('API 키를 먼저 입력하세요');
-      setShowKey(true);
-      return;
-    }
+    if (!apiKey) { setShowKey(true); return; }
     setLoading(true);
-    setError('');
-    setDraft(null);
+    setGenResults(null);
+    setRegistered(false);
     try {
-      const result = await generateDraft({ ...form, apiKey });
-      setDraft(result);
-      if (result.title && !form.title) {
-        setForm((f) => ({ ...f, title: result.title }));
-      }
+      const result = await generateMultiChannel({
+        pillarId,
+        topicPrompt: finalTopicPrompt,
+        channels: selectedChannels,
+        extraContext,
+        apiKey,
+      });
+      setGenResults(result);
+      setActiveResultTab(selectedChannels[0] || '');
     } catch (e) {
-      setError(e.message);
+      setGenResults({ results: {}, errors: { _global: e.message } });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!form.title.trim()) return;
+  const handleRegisterToPipeline = () => {
+    if (!genResults || registered) return;
+    const title = topic?.label || customTopic || `${pillar?.label} 콘텐츠`;
+    const aiDrafts = { ...genResults.results };
 
     onAdd({
       id: Date.now(),
-      title: form.title.trim(),
-      track: form.track,
-      pillar: form.pillar,
-      stage: draft ? 'draft' : 'idea',
-      channels: {},
-      date: form.date || new Date().toISOString().split('T')[0],
-      draft: draft || null,
+      title,
+      track: pillarId === 'PR' ? 'B' : 'B',
+      pillar: pillarId,
+      stage: 'draft',
+      channels: selectedChannels.reduce((acc, ch) => ({ ...acc, [ch]: false }), {}),
+      date: publishDate || new Date().toISOString().split('T')[0],
+      draft: aiDrafts,
     });
-
-    setForm({ track: form.track, pillar: form.pillar, title: '', date: '', brief: '' });
-    setDraft(null);
+    setRegistered(true);
   };
 
+  const resetAll = () => {
+    setStep(0);
+    setPillarId('');
+    setTopicId('');
+    setCustomTopic('');
+    setSelectedChannels([]);
+    setPublishDate('');
+    setExtraContext('');
+    setGenResults(null);
+    setActiveResultTab('');
+    setRegistered(false);
+  };
+
+  const toggleChannel = (ch) => {
+    setSelectedChannels((prev) =>
+      prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
+    );
+  };
+
+  // ===========================================
+  // RENDER
+  // ===========================================
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-bold">콘텐츠 제작</h2>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold">콘텐츠 팩토리</h2>
+        {(step > 0 || genResults) && (
+          <button onClick={resetAll} className="text-[12px] text-mist hover:text-steel border-none bg-transparent cursor-pointer">
+            처음부터 다시
+          </button>
+        )}
+      </div>
 
       {/* API Key */}
       <div className="bg-white rounded-xl p-4 border border-pale">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-1">
           <span className="text-[12px] font-semibold text-steel">Claude API Key</span>
-          <button
-            type="button"
-            onClick={() => setShowKey(!showKey)}
-            className="text-[11px] text-accent border-none bg-transparent cursor-pointer"
-          >
+          <button type="button" onClick={() => setShowKey(!showKey)} className="text-[11px] text-accent border-none bg-transparent cursor-pointer">
             {showKey ? '숨기기' : apiKey ? '변경' : '설정'}
           </button>
         </div>
         {showKey ? (
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-api..."
-            className="w-full px-3 py-2 rounded-lg border border-pale text-[12px] outline-none focus:border-accent bg-snow"
-          />
+          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-ant-api..."
+            className="w-full px-3 py-2 rounded-lg border border-pale text-[12px] outline-none focus:border-accent bg-snow" />
         ) : (
-          <div className="text-[11px] text-mist">
-            {apiKey ? '••••••••' + apiKey.slice(-8) : '키가 설정되지 않았습니다'}
-          </div>
+          <div className="text-[11px] text-mist">{apiKey ? '••••••••' + apiKey.slice(-8) : '키가 설정되지 않았습니다'}</div>
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl p-6 border border-pale space-y-5">
-        {/* Track */}
-        <div>
-          <label className="block text-[12px] font-semibold text-steel mb-2">트랙</label>
-          <div className="flex gap-2">
-            {['A', 'B'].map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => handleTrackChange(t)}
-                className={`flex-1 py-2.5 rounded-lg text-[13px] font-semibold border cursor-pointer transition-colors ${
-                  form.track === t
-                    ? t === 'A'
-                      ? 'bg-track-a text-white border-track-a'
-                      : 'bg-track-b text-white border-track-b'
-                    : 'bg-white text-slate border-pale hover:bg-snow'
-                }`}
-              >
-                Track {t} — {t === 'A' ? '해외/글로벌' : '국내 전용'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Pillar */}
-        <div>
-          <label className="block text-[12px] font-semibold text-steel mb-2">콘텐츠 필라</label>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {pillars.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setForm({ ...form, pillar: p.id })}
-                className={`p-3 rounded-lg text-left border cursor-pointer transition-colors ${
-                  form.pillar === p.id
-                    ? 'bg-dark text-white border-dark'
-                    : 'bg-white text-slate border-pale hover:bg-snow'
-                }`}
-              >
-                <div className="text-[12px] font-semibold">{p.id}</div>
-                <div className={`text-[11px] ${form.pillar === p.id ? 'text-silver' : 'text-mist'}`}>
-                  {p.label}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Title */}
-        <div>
-          <label className="block text-[12px] font-semibold text-steel mb-2">제목</label>
-          <input
-            type="text"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="콘텐츠 제목을 입력하세요 (AI가 생성할 수도 있습니다)"
-            className="w-full px-4 py-3 rounded-lg border border-pale text-[13px] outline-none focus:border-accent bg-white"
-          />
-        </div>
-
-        {/* Date */}
-        <div>
-          <label className="block text-[12px] font-semibold text-steel mb-2">발행 예정일</label>
-          <input
-            type="date"
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-            className="w-full px-4 py-3 rounded-lg border border-pale text-[13px] outline-none focus:border-accent bg-white"
-          />
-        </div>
-
-        {/* Brief */}
-        <div>
-          <label className="block text-[12px] font-semibold text-steel mb-2">브리프 / 메모</label>
-          <textarea
-            value={form.brief}
-            onChange={(e) => setForm({ ...form, brief: e.target.value })}
-            placeholder="콘텐츠 방향, 키워드, 참고자료 등"
-            rows={4}
-            className="w-full px-4 py-3 rounded-lg border border-pale text-[13px] outline-none focus:border-accent bg-white resize-none"
-          />
-        </div>
-
-        {/* AI Generate */}
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={loading}
-          className={`w-full py-3 rounded-lg text-[14px] font-semibold border-none cursor-pointer transition-colors ${
-            loading
-              ? 'bg-mist text-white cursor-wait'
-              : 'bg-accent text-white hover:bg-accent-dim'
-          }`}
-        >
-          {loading ? '생성 중...' : 'AI 초안 생성'}
-        </button>
-
-        {error && (
-          <div className="text-[12px] text-danger bg-danger/5 rounded-lg p-3">
-            {error}
-          </div>
-        )}
-
-        {/* Draft Preview */}
-        {draft && (
-          <div className="bg-snow rounded-xl p-5 border border-pale space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-[13px] font-bold">AI 생성 초안</h4>
-              <button
-                type="button"
-                onClick={() => setDraft(null)}
-                className="text-[11px] text-mist border-none bg-transparent cursor-pointer hover:text-steel"
-              >
-                닫기
-              </button>
+      {/* Stepper */}
+      {!genResults && (
+        <div className="flex items-center gap-1">
+          {STEPS.map((label, i) => (
+            <div key={i} className="flex items-center gap-1 flex-1">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                i < step ? 'bg-accent text-white' : i === step ? 'bg-dark text-white' : 'bg-pale text-mist'
+              }`}>{i + 1}</div>
+              <span className={`text-[10px] hidden md:block truncate ${i === step ? 'text-dark font-semibold' : 'text-mist'}`}>{label}</span>
+              {i < STEPS.length - 1 && <div className="flex-1 h-px bg-pale mx-1" />}
             </div>
-            {draft.title && (
-              <div>
-                <div className="text-[10px] text-steel mb-1">제목</div>
-                <div className="text-[14px] font-bold">{draft.title}</div>
-              </div>
-            )}
-            {draft.body && (
-              <div>
-                <div className="text-[10px] text-steel mb-1">본문</div>
-                <div className="text-[12px] leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
-                  {draft.body}
-                </div>
-              </div>
-            )}
-            {draft.hashtags?.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {draft.hashtags.map((tag, i) => (
-                  <span key={i} className="text-[10px] text-accent bg-accent-light/30 px-2 py-0.5 rounded-full">
-                    {tag.startsWith('#') ? tag : `#${tag}`}
-                  </span>
-                ))}
-              </div>
-            )}
-            {draft.cta && (
-              <div className="text-[11px] text-steel italic">{draft.cta}</div>
-            )}
-          </div>
-        )}
+          ))}
+        </div>
+      )}
 
-        {/* Submit */}
-        <button
-          type="submit"
-          className="w-full py-3 rounded-lg bg-dark text-white text-[14px] font-semibold border-none cursor-pointer hover:bg-charcoal transition-colors"
-        >
-          {draft ? '초안과 함께 추가' : '콘텐츠 추가'}
+      {/* ========================= STEP 0: Pillar ========================= */}
+      {!genResults && step === 0 && (
+        <div className="bg-white rounded-xl p-5 border border-pale space-y-4">
+          <div>
+            <div className="text-[13px] font-bold mb-1">콘텐츠 필라를 선택하세요</div>
+            <div className="text-[11px] text-mist">어떤 카테고리의 콘텐츠를 만드시겠습니까?</div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+            {Object.entries(PILLAR_PRESETS).map(([id, p]) => (
+              <button key={id} onClick={() => { setPillarId(id); setTopicId(''); }}
+                className={`p-4 rounded-xl text-left border cursor-pointer transition-all ${
+                  pillarId === id ? 'bg-dark text-white border-dark shadow-md' : 'bg-white text-slate border-pale hover:border-silver hover:shadow-sm'
+                }`}>
+                <div className="text-xl mb-1.5">{p.icon}</div>
+                <div className="text-[13px] font-bold">{id}: {p.label}</div>
+                <div className={`text-[11px] mt-0.5 ${pillarId === id ? 'text-silver' : 'text-mist'}`}>{p.desc}</div>
+              </button>
+            ))}
+          </div>
+          <StepNav step={step} setStep={setStep} canProceed={canProceed()} />
+        </div>
+      )}
+
+      {/* ========================= STEP 1: Topic ========================= */}
+      {!genResults && step === 1 && pillar && (
+        <div className="bg-white rounded-xl p-5 border border-pale space-y-4">
+          <div>
+            <div className="text-[13px] font-bold mb-1">{pillar.icon} {pillarId}: {pillar.label} — 주제 선택</div>
+            <div className="text-[11px] text-mist">프리셋 주제를 선택하거나 직접 입력하세요</div>
+          </div>
+          <div className="space-y-2">
+            {pillar.topics.map((t) => (
+              <button key={t.id} onClick={() => setTopicId(t.id)}
+                className={`w-full p-3.5 rounded-lg text-left border cursor-pointer transition-colors ${
+                  topicId === t.id ? 'bg-dark text-white border-dark' : 'bg-white text-slate border-pale hover:bg-snow'
+                }`}>
+                <div className="text-[13px] font-medium">{t.label}</div>
+                {t.prompt && (
+                  <div className={`text-[11px] mt-1 leading-relaxed ${topicId === t.id ? 'text-silver' : 'text-mist'}`}>
+                    {t.prompt.length > 80 ? t.prompt.slice(0, 80) + '...' : t.prompt}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+          {isCustomTopic && (
+            <textarea value={customTopic} onChange={(e) => setCustomTopic(e.target.value)}
+              placeholder="원하는 주제, 키워드, 방향을 자유롭게 입력하세요" rows={3}
+              className="w-full px-4 py-3 rounded-lg border border-pale text-[13px] outline-none focus:border-accent bg-snow resize-none" />
+          )}
+          <StepNav step={step} setStep={setStep} canProceed={canProceed()} />
+        </div>
+      )}
+
+      {/* ========================= STEP 2: Channels ========================= */}
+      {!genResults && step === 2 && (
+        <div className="bg-white rounded-xl p-5 border border-pale space-y-4">
+          <div>
+            <div className="text-[13px] font-bold mb-1">발행 채널을 선택하세요 (복수 가능)</div>
+            <div className="text-[11px] text-mist">채널마다 맞춤 포맷으로 각각 생성됩니다</div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {CHANNEL_IDS.map((ch) => {
+              const cfg = CHANNEL_CONFIGS[ch];
+              const selected = selectedChannels.includes(ch);
+              return (
+                <button key={ch} onClick={() => toggleChannel(ch)}
+                  className={`p-4 rounded-xl text-left border cursor-pointer transition-all ${
+                    selected ? 'bg-accent/10 border-accent shadow-sm' : 'bg-white border-pale hover:border-silver'
+                  }`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center text-[11px] ${
+                      selected ? 'bg-accent border-accent text-white' : 'border-silver bg-white'
+                    }`}>{selected ? '✓' : ''}</div>
+                    <span className="text-[13px] font-bold">{cfg.name}</span>
+                  </div>
+                  <div className="text-[11px] text-mist mt-1.5 ml-7">{cfg.charTarget}</div>
+                </button>
+              );
+            })}
+          </div>
+          <StepNav step={step} setStep={setStep} canProceed={canProceed()} />
+        </div>
+      )}
+
+      {/* ========================= STEP 3: Settings ========================= */}
+      {!genResults && step === 3 && (
+        <div className="bg-white rounded-xl p-5 border border-pale space-y-4">
+          <div>
+            <div className="text-[13px] font-bold mb-1">추가 설정</div>
+            <div className="text-[11px] text-mist">발행일과 참고사항을 입력하세요 (선택)</div>
+          </div>
+
+          {/* Summary */}
+          <div className="bg-snow rounded-lg p-4 space-y-2 text-[12px]">
+            <div className="flex justify-between">
+              <span className="text-steel">필라</span>
+              <span className="font-semibold">{pillar?.icon} {pillarId}: {pillar?.label}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-steel">주제</span>
+              <span className="font-semibold truncate ml-4 max-w-[250px]">{topic?.label}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-steel">채널</span>
+              <span className="font-semibold">{selectedChannels.map((ch) => CHANNEL_CONFIGS[ch]?.name).join(', ')}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-steel mb-2">발행 예정일</label>
+            <input type="date" value={publishDate} onChange={(e) => setPublishDate(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-pale text-[13px] outline-none focus:border-accent bg-white" />
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-steel mb-2">참고사항 / 소스</label>
+            <textarea value={extraContext} onChange={(e) => setExtraContext(e.target.value)}
+              placeholder="추가로 반영할 내용, URL, 특별 지시사항 등" rows={3}
+              className="w-full px-4 py-3 rounded-lg border border-pale text-[13px] outline-none focus:border-accent bg-white resize-none" />
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={() => setStep(2)}
+              className="px-5 py-3 rounded-lg text-[13px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
+              이전
+            </button>
+            <button onClick={handleGenerate} disabled={loading}
+              className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
+                loading ? 'bg-mist text-white cursor-wait' : 'bg-accent text-white hover:bg-accent-dim'
+              }`}>
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {selectedChannels.length}개 채널 생성 중...
+                </span>
+              ) : (
+                `콘텐츠 생성하기 (${selectedChannels.length}채널)`
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================= RESULTS ========================= */}
+      {genResults && (
+        <div className="space-y-4">
+          {/* Global error */}
+          {genResults.errors?._global && (
+            <div className="text-[13px] text-danger bg-danger/5 rounded-xl p-4 border border-danger/20">
+              {genResults.errors._global}
+            </div>
+          )}
+
+          {/* Channel Tabs */}
+          {selectedChannels.length > 0 && !genResults.errors?._global && (
+            <>
+              <div className="flex gap-1.5 overflow-x-auto">
+                {selectedChannels.map((ch) => {
+                  const cfg = CHANNEL_CONFIGS[ch];
+                  const hasError = !!genResults.errors?.[ch];
+                  return (
+                    <button key={ch} onClick={() => setActiveResultTab(ch)}
+                      className={`px-4 py-2.5 rounded-lg text-[12px] font-semibold whitespace-nowrap border cursor-pointer transition-colors ${
+                        activeResultTab === ch
+                          ? 'bg-dark text-white border-dark'
+                          : hasError
+                            ? 'bg-danger/5 text-danger border-danger/20'
+                            : 'bg-white text-slate border-pale hover:bg-snow'
+                      }`}>
+                      {cfg.name} {hasError ? '⚠️' : '✓'}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Active channel content */}
+              {activeResultTab && (
+                <div className="bg-white rounded-xl border border-pale overflow-hidden">
+                  {genResults.errors?.[activeResultTab] ? (
+                    <div className="p-5 text-[13px] text-danger">
+                      생성 실패: {genResults.errors[activeResultTab]}
+                    </div>
+                  ) : genResults.results?.[activeResultTab] ? (
+                    <div className="p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[13px] font-bold">{CHANNEL_CONFIGS[activeResultTab]?.name}</div>
+                        <div className="flex gap-2">
+                          <button onClick={() => { navigator.clipboard?.writeText(genResults.results[activeResultTab]); }}
+                            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-snow border border-pale cursor-pointer hover:bg-pale">
+                            복사
+                          </button>
+                          <button onClick={handleGenerate} disabled={loading}
+                            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-accent bg-accent/5 border border-accent/20 cursor-pointer hover:bg-accent/10">
+                            재생성
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-[13px] leading-[1.8] whitespace-pre-wrap max-h-[500px] overflow-y-auto bg-snow rounded-lg p-4">
+                        {genResults.results[activeResultTab]}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-5 text-[13px] text-mist">생성된 내용이 없습니다</div>
+                  )}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <button onClick={resetAll}
+                  className="px-5 py-3 rounded-lg text-[13px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
+                  새 콘텐츠 만들기
+                </button>
+                <button onClick={handleRegisterToPipeline} disabled={registered}
+                  className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
+                    registered
+                      ? 'bg-success text-white cursor-default'
+                      : 'bg-dark text-white hover:bg-charcoal'
+                  }`}>
+                  {registered ? '파이프라인에 등록 완료 ✓' : '파이프라인에 등록'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===========================================
+// Step Navigation
+// ===========================================
+
+function StepNav({ step, setStep, canProceed }) {
+  return (
+    <div className="flex gap-2 pt-2">
+      {step > 0 && (
+        <button onClick={() => setStep(step - 1)}
+          className="px-5 py-2.5 rounded-lg text-[13px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
+          이전
         </button>
-      </form>
+      )}
+      <button onClick={() => canProceed && setStep(step + 1)} disabled={!canProceed}
+        className={`flex-1 py-2.5 rounded-lg text-[13px] font-semibold border-none cursor-pointer transition-colors ${
+          canProceed ? 'bg-dark text-white hover:bg-charcoal' : 'bg-pale text-mist cursor-not-allowed'
+        }`}>
+        다음
+      </button>
     </div>
   );
 }
