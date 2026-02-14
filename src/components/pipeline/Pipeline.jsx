@@ -1,6 +1,6 @@
 import { PIPELINE_STAGES } from '../../constants';
 
-export default function Pipeline({ contents, setContents }) {
+export default function Pipeline({ contents, setContents, onOpenContent }) {
   const handleDrop = (contentId, newStage) => {
     setContents(
       contents.map((c) =>
@@ -55,7 +55,10 @@ export default function Pipeline({ contents, setContents }) {
                       </span>
                       <span className="text-[10px] text-mist">{item.pillar}</span>
                     </div>
-                    <div className="text-[12px] font-medium leading-snug">
+                    <div
+                      className="text-[12px] font-medium leading-snug cursor-pointer hover:text-accent"
+                      onClick={() => onOpenContent(item)}
+                    >
                       {item.title}
                     </div>
                     <div className="text-[10px] text-steel mt-1.5">

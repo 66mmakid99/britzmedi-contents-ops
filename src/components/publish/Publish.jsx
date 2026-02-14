@@ -1,6 +1,6 @@
 import { CHANNELS, PIPELINE_STAGES } from '../../constants';
 
-export default function Publish({ contents, setContents }) {
+export default function Publish({ contents, setContents, onOpenContent }) {
   const toggleChannel = (contentId, channelId) => {
     setContents(
       contents.map((c) =>
@@ -60,7 +60,10 @@ export default function Publish({ contents, setContents }) {
                     {item.date}
                   </td>
                   <td className="p-3">
-                    <div className="font-medium truncate max-w-[300px]">
+                    <div
+                      className="font-medium truncate max-w-[300px] cursor-pointer hover:text-accent"
+                      onClick={() => onOpenContent(item)}
+                    >
                       {item.title}
                     </div>
                   </td>

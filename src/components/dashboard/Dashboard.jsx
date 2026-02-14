@@ -1,6 +1,6 @@
 import { PIPELINE_STAGES, CHANNELS } from '../../constants';
 
-export default function Dashboard({ contents }) {
+export default function Dashboard({ contents, onOpenContent, setActivePage }) {
   const stageCount = (stageId) => contents.filter((c) => c.stage === stageId).length;
   const trackCount = (track) => contents.filter((c) => c.track === track).length;
   const upcoming = [...contents]
@@ -44,7 +44,8 @@ export default function Dashboard({ contents }) {
           {upcoming.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-3 p-3 rounded-lg bg-snow"
+              className="flex items-center gap-3 p-3 rounded-lg bg-snow cursor-pointer hover:bg-pale/50 transition-colors"
+              onClick={() => onOpenContent(item)}
             >
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded ${

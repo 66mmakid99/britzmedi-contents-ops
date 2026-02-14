@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-export default function Calendar({ contents }) {
+export default function Calendar({ contents, onOpenContent }) {
   const [current, setCurrent] = useState(new Date());
   const year = current.getFullYear();
   const month = current.getMonth();
@@ -95,12 +95,13 @@ export default function Calendar({ contents }) {
                     {items.map((item) => (
                       <div
                         key={item.id}
-                        className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded mb-0.5 truncate ${
+                        className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded mb-0.5 truncate cursor-pointer hover:opacity-70 ${
                           item.track === 'A'
                             ? 'bg-track-a/10 text-track-a'
                             : 'bg-track-b/10 text-track-b'
                         }`}
                         title={item.title}
+                        onClick={() => onOpenContent(item)}
                       >
                         {item.title}
                       </div>
