@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { PILLAR_PRESETS, CHANNEL_CONFIGS, FACTORY_CHANNELS, PR_DERIVED_CHANNELS } from '../../constants/prompts';
-import { generateMultiChannel, generateFromPR } from '../../lib/claude';
+import { generateMultiChannel, generateFromPR, reviewMultiChannel } from '../../lib/claude';
 
 const STEPS = ['필라 선택', '주제 선택', '채널 선택', '추가 설정'];
 
@@ -117,6 +117,13 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const [editedSections, setEditedSections] = useState({});
   const [prFixed, setPrFixed] = useState({ ...PR_FIXED_DEFAULTS });
   const [copyStatus, setCopyStatus] = useState('');
+  const [reviewResults, setReviewResults] = useState({});
+  const [reviewing, setReviewing] = useState(false);
+
+  // Derived: any red issues across all channels?
+  const hasRedIssues = Object.values(reviewResults).some(
+    (issues) => issues.some((i) => i.severity === 'red')
+  );
 
   // --- From-PR mode state ---
   const isFromPR = !!prSourceData;
@@ -162,6 +169,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setRegistered(false);
     setEditedSections({});
     setCopyStatus('');
+    setReviewResults({});
+    setReviewing(false);
     setPrFixed((prev) => ({ ...prev, 날짜: publishDate || new Date().toISOString().split('T')[0] }));
     try {
       const result = await generateMultiChannel({
@@ -172,6 +181,21 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       const parsed = {};
       for (const [ch, text] of Object.entries(result.results || {})) parsed[ch] = parseSections(text);
       setEditedSections(parsed);
+
+      // 2nd pass: AI review
+      if (Object.keys(result.results || {}).length > 0) {
+        setReviewing(true);
+        try {
+          const reviews = await reviewMultiChannel({
+            contentByChannel: result.results,
+            channelIds: Object.keys(result.results),
+            userSourceText: finalTopicPrompt,
+            apiKey,
+          });
+          setReviewResults(reviews);
+        } catch { /* review failure is non-blocking */ }
+        setReviewing(false);
+      }
     } catch (e) {
       setGenResults({ results: {}, errors: { _global: e.message } });
     } finally {
@@ -187,6 +211,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setGenResults(null);
     setRegistered(false);
     setEditedSections({});
+    setReviewResults({});
+    setReviewing(false);
     try {
       const result = await generateFromPR({ prText: prSourceData.draft, channels: selectedChannels, apiKey });
       setGenResults(result);
@@ -194,6 +220,21 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       const parsed = {};
       for (const [ch, text] of Object.entries(result.results || {})) parsed[ch] = parseSections(text);
       setEditedSections(parsed);
+
+      // 2nd pass: AI review
+      if (Object.keys(result.results || {}).length > 0) {
+        setReviewing(true);
+        try {
+          const reviews = await reviewMultiChannel({
+            contentByChannel: result.results,
+            channelIds: Object.keys(result.results),
+            userSourceText: prSourceData.draft,
+            apiKey,
+          });
+          setReviewResults(reviews);
+        } catch { /* review failure is non-blocking */ }
+        setReviewing(false);
+      }
     } catch (e) {
       setGenResults({ results: {}, errors: { _global: e.message } });
     } finally {
@@ -268,6 +309,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setSelectedChannels([]); setPublishDate(''); setExtraContext('');
     setGenResults(null); setActiveResultTab(''); setRegistered(false);
     setEditedSections({}); setPrFixed({ ...PR_FIXED_DEFAULTS }); setCopyStatus('');
+    setReviewResults({}); setReviewing(false);
     if (isFromPR) onClearPRSource?.();
   };
 
@@ -348,15 +390,22 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             handleCopyAll={handleCopyAll} copyStatus={copyStatus} setCopyStatus={setCopyStatus}
             loading={loading} onRegenerate={handleGenerateFromPR}
             isPR={false} prFixed={prFixed} updatePrFixed={updatePrFixed}
+            reviewResults={reviewResults} reviewing={reviewing} hasRedIssues={hasRedIssues}
             bottomActions={
               <div className="flex gap-2">
                 <button onClick={resetAll} className="px-5 py-3 rounded-lg text-[13px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">취소</button>
-                <button onClick={handleRegisterFromPR} disabled={registered}
-                  className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
-                    registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
-                  }`}>
-                  {registered ? '파이프라인에 등록 완료 ✓' : `${selectedChannels.length}개 채널 콘텐츠 파이프라인에 등록`}
-                </button>
+                {hasRedIssues ? (
+                  <div className="flex-1 py-3 rounded-lg text-[13px] font-bold text-center text-danger bg-danger/5 border border-danger/20">
+                    수정 후 내보내기 — 필수 수정 사항을 먼저 해결하세요
+                  </div>
+                ) : (
+                  <button onClick={handleRegisterFromPR} disabled={registered}
+                    className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
+                      registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
+                    }`}>
+                    {registered ? '파이프라인에 등록 완료 ✓' : `${selectedChannels.length}개 채널 콘텐츠 파이프라인에 등록`}
+                  </button>
+                )}
               </div>
             }
           />
@@ -510,45 +559,60 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
           handleCopyAll={handleCopyAll} copyStatus={copyStatus} setCopyStatus={setCopyStatus}
           loading={loading} onRegenerate={handleGenerate}
           isPR={isPRResult} prFixed={prFixed} updatePrFixed={updatePrFixed}
+          reviewResults={reviewResults} reviewing={reviewing} hasRedIssues={hasRedIssues}
           bottomActions={
             isPRResult ? (
               /* PR export actions */
               <div className="space-y-3">
-                <div className="flex gap-2">
-                  <button onClick={() => {
-                    const sections = editedSections.pressrelease || [];
-                    const text = assemblePR(sections, prFixed);
-                    const titleSec = sections.find((s) => s.label === '제목');
-                    downloadAsWord(text, titleSec?.text?.trim() || '보도자료');
-                  }} className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
-                    Word 다운로드
-                  </button>
-                  <button onClick={() => {
-                    const sections = editedSections.pressrelease || [];
-                    const text = assemblePR(sections, prFixed);
-                    const titleSec = sections.find((s) => s.label === '제목');
-                    openPrintView(text, titleSec?.text?.trim() || '보도자료');
-                  }} className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
-                    PDF 다운로드
-                  </button>
-                </div>
-                <button onClick={handlePublishPR} disabled={registered}
-                  className={`w-full py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
-                    registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
-                  }`}>
-                  {registered ? '발행완료로 등록됨 ✓' : '발행완료로 파이프라인 등록'}
-                </button>
+                {hasRedIssues ? (
+                  <div className="py-3 rounded-lg text-[13px] font-bold text-center text-danger bg-danger/5 border border-danger/20">
+                    수정 후 내보내기 — 필수 수정 사항을 먼저 해결하세요
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <button onClick={() => {
+                        const sections = editedSections.pressrelease || [];
+                        const text = assemblePR(sections, prFixed);
+                        const titleSec = sections.find((s) => s.label === '제목');
+                        downloadAsWord(text, titleSec?.text?.trim() || '보도자료');
+                      }} className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
+                        Word 다운로드
+                      </button>
+                      <button onClick={() => {
+                        const sections = editedSections.pressrelease || [];
+                        const text = assemblePR(sections, prFixed);
+                        const titleSec = sections.find((s) => s.label === '제목');
+                        openPrintView(text, titleSec?.text?.trim() || '보도자료');
+                      }} className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
+                        PDF 다운로드
+                      </button>
+                    </div>
+                    <button onClick={handlePublishPR} disabled={registered}
+                      className={`w-full py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
+                        registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
+                      }`}>
+                      {registered ? '발행완료로 등록됨 ✓' : '발행완료로 파이프라인 등록'}
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
               /* Non-PR register */
               <div className="flex gap-2">
                 <button onClick={resetAll} className="px-5 py-3 rounded-lg text-[13px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">새 콘텐츠 만들기</button>
-                <button onClick={handleRegisterToPipeline} disabled={registered}
-                  className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
-                    registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
-                  }`}>
-                  {registered ? '파이프라인에 등록 완료 ✓' : '파이프라인에 등록'}
-                </button>
+                {hasRedIssues ? (
+                  <div className="flex-1 py-3 rounded-lg text-[13px] font-bold text-center text-danger bg-danger/5 border border-danger/20">
+                    수정 후 내보내기
+                  </div>
+                ) : (
+                  <button onClick={handleRegisterToPipeline} disabled={registered}
+                    className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
+                      registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
+                    }`}>
+                    {registered ? '파이프라인에 등록 완료 ✓' : '파이프라인에 등록'}
+                  </button>
+                )}
               </div>
             )
           }
@@ -581,7 +645,17 @@ function APIKeyBox({ apiKey, setApiKey, showKey, setShowKey }) {
   );
 }
 
-function ResultsView({ genResults, selectedChannels, activeResultTab, setActiveResultTab, editedSections, updateSection, handleCopyAll, copyStatus, setCopyStatus, loading, onRegenerate, isPR, prFixed, updatePrFixed, bottomActions }) {
+function ResultsView({ genResults, selectedChannels, activeResultTab, setActiveResultTab, editedSections, updateSection, handleCopyAll, copyStatus, setCopyStatus, loading, onRegenerate, isPR, prFixed, updatePrFixed, reviewResults, reviewing, hasRedIssues, bottomActions }) {
+  const activeReview = reviewResults?.[activeResultTab] || [];
+
+  // Group issues by section label for per-section annotations
+  const issuesBySection = {};
+  activeReview.forEach((issue) => {
+    const key = issue.section || '_general';
+    if (!issuesBySection[key]) issuesBySection[key] = [];
+    issuesBySection[key].push(issue);
+  });
+
   return (
     <div className="space-y-4">
       {genResults.errors?._global && (
@@ -589,16 +663,22 @@ function ResultsView({ genResults, selectedChannels, activeResultTab, setActiveR
       )}
       {selectedChannels.length > 0 && !genResults.errors?._global && (
         <>
+          {/* Review Summary Card */}
+          <ReviewSummary reviewResults={reviewResults} reviewing={reviewing} selectedChannels={selectedChannels} />
+
           <div className="flex gap-1.5 overflow-x-auto">
             {selectedChannels.map((ch) => {
               const cfg = CHANNEL_CONFIGS[ch];
               const hasError = !!genResults.errors?.[ch];
+              const chIssues = reviewResults?.[ch] || [];
+              const redCount = chIssues.filter((i) => i.severity === 'red').length;
+              const yellowCount = chIssues.filter((i) => i.severity === 'yellow').length;
               return (
                 <button key={ch} onClick={() => { setActiveResultTab(ch); setCopyStatus(''); }}
                   className={`px-4 py-2.5 rounded-lg text-[12px] font-semibold whitespace-nowrap border cursor-pointer transition-colors ${
                     activeResultTab === ch ? 'bg-dark text-white border-dark' : hasError ? 'bg-danger/5 text-danger border-danger/20' : 'bg-white text-slate border-pale hover:bg-snow'
                   }`}>
-                  {cfg.name} {hasError ? '⚠️' : '✓'}
+                  {cfg.name} {hasError ? '⚠️' : redCount > 0 ? `🔴${redCount}` : yellowCount > 0 ? `🟡${yellowCount}` : '✅'}
                 </button>
               );
             })}
@@ -614,11 +694,22 @@ function ResultsView({ genResults, selectedChannels, activeResultTab, setActiveR
                     <button onClick={onRegenerate} disabled={loading}
                       className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-accent bg-accent/5 border border-accent/20 cursor-pointer hover:bg-accent/10">재생성</button>
                   </div>
+
+                  {/* General issues (no specific section) */}
+                  {issuesBySection._general?.length > 0 && (
+                    <IssueAnnotations issues={issuesBySection._general} />
+                  )}
+
                   <div className="text-[11px] font-semibold text-accent mb-1">AI 생성 영역</div>
                   {editedSections[activeResultTab].map((sec, idx) => (
-                    <SectionField key={idx} label={sec.label} value={sec.text}
-                      onChange={(val) => updateSection(activeResultTab, idx, val)}
-                      rows={sec.label === '본문' || sec.label === '전체' ? 12 : sec.label.startsWith('본문') || sec.label.startsWith('소제목') ? 8 : 3} />
+                    <div key={idx}>
+                      <SectionField label={sec.label} value={sec.text}
+                        onChange={(val) => updateSection(activeResultTab, idx, val)}
+                        rows={sec.label === '본문' || sec.label === '전체' ? 12 : sec.label.startsWith('본문') || sec.label.startsWith('소제목') ? 8 : 3} />
+                      {issuesBySection[sec.label]?.length > 0 && (
+                        <IssueAnnotations issues={issuesBySection[sec.label]} />
+                      )}
+                    </div>
                   ))}
                   {isPR && (
                     <>
@@ -655,6 +746,86 @@ function ResultsView({ genResults, selectedChannels, activeResultTab, setActiveR
           {bottomActions}
         </>
       )}
+    </div>
+  );
+}
+
+function ReviewSummary({ reviewResults, reviewing, selectedChannels }) {
+  if (reviewing) {
+    return (
+      <div className="bg-accent/5 rounded-xl p-4 border border-accent/20 flex items-center gap-3">
+        <span className="inline-block w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+        <span className="text-[13px] font-semibold text-accent">AI 검수 진행 중...</span>
+      </div>
+    );
+  }
+
+  if (!reviewResults || Object.keys(reviewResults).length === 0) return null;
+
+  let totalRed = 0;
+  let totalYellow = 0;
+  let totalChannels = 0;
+  let passedChannels = 0;
+
+  for (const ch of selectedChannels) {
+    const issues = reviewResults[ch];
+    if (!issues) continue;
+    totalChannels++;
+    const reds = issues.filter((i) => i.severity === 'red').length;
+    const yellows = issues.filter((i) => i.severity === 'yellow').length;
+    totalRed += reds;
+    totalYellow += yellows;
+    if (reds === 0 && yellows === 0) passedChannels++;
+  }
+
+  if (totalChannels === 0) return null;
+
+  const allPass = totalRed === 0 && totalYellow === 0;
+
+  return (
+    <div className={`rounded-xl p-4 border ${
+      totalRed > 0 ? 'bg-danger/5 border-danger/20' : totalYellow > 0 ? 'bg-warning/5 border-warning/20' : 'bg-success/5 border-success/20'
+    }`}>
+      <div className="text-[12px] font-bold mb-2">AI 검수 결과</div>
+      <div className="flex items-center gap-4 text-[13px]">
+        {totalRed > 0 && (
+          <span className="font-bold text-danger">🔴 {totalRed}건 (반드시 수정)</span>
+        )}
+        {totalYellow > 0 && (
+          <span className="font-bold text-warning">🟡 {totalYellow}건 (확인 권장)</span>
+        )}
+        {allPass && (
+          <span className="font-bold text-success">✅ 전체 통과 ({passedChannels}채널)</span>
+        )}
+      </div>
+      {totalRed > 0 && (
+        <div className="text-[11px] text-danger mt-2">🔴 필수 수정 사항이 있습니다. 수정 후 내보내기가 가능합니다.</div>
+      )}
+    </div>
+  );
+}
+
+function IssueAnnotations({ issues }) {
+  if (!issues || issues.length === 0) return null;
+  return (
+    <div className="space-y-1.5 mt-1 mb-2">
+      {issues.map((issue, i) => (
+        <div key={i} className={`rounded-lg px-3 py-2 text-[11px] leading-relaxed border ${
+          issue.severity === 'red' ? 'bg-danger/5 border-danger/20 text-danger' : 'bg-warning/5 border-warning/20 text-warning'
+        }`}>
+          <div className="flex items-start gap-1.5">
+            <span className="shrink-0 mt-0.5">{issue.severity === 'red' ? '🔴' : '🟡'}</span>
+            <div>
+              <span className="font-bold">[{issue.category}]</span> {issue.message}
+              {issue.quote && (
+                <div className={`mt-1 text-[10px] italic ${issue.severity === 'red' ? 'text-danger/70' : 'text-warning/70'}`}>
+                  &quot;{issue.quote}&quot;
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
