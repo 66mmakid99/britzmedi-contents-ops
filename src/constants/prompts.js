@@ -193,7 +193,53 @@ BRITZMEDI Co., Ltd. (브릿츠메디)는 2017년 설립된 메디컬 에스테�
 - 굵게, 기울임, 제목 마크다운 기호 일체 사용하지 말 것
 - 뉴스와이어 입력 양식에 바로 복사-붙여넣기 가능하도록 플레인 텍스트 유지`,
   },
+  linkedin: {
+    name: '💼 LinkedIn',
+    charTarget: '1,000~1,500자',
+    formatPrompt: `## LinkedIn 포스트 포맷 규칙
+- 분량: 1000~1500자
+- 구조: 아래 섹션 라벨을 반드시 사용하여 구분
+  [훅] 첫 2줄로 시선 잡기 (데이터 또는 질문)
+  [본문] 인사이트 중심 3~4문단. 전문적 톤, 업계 관점
+  [핵심 포인트] 3가지 핵심 메시지 (번호 매기기)
+  [CTA] 댓글/공유 유도 질문
+  [해시태그] 관련 해시태그 10~15개
+- B2B 전문가 대상 톤
+- 데이터와 인사이트 중심
+- 영어 해시태그 포함 (글로벌 도달)
+
+⚠️ 출력 형식 규칙 (필수):
+- 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지
+- 일반 텍스트로만 작성
+- 섹션 구분은 [훅], [본문] 같은 대괄호 라벨만 사용`,
+  },
+  instagram: {
+    name: '📸 Instagram',
+    charTarget: '캡션 300~500자 + 캐러셀 가이드',
+    formatPrompt: `## Instagram 포스트 포맷 규칙
+- 분량: 캡션 300~500자 + 캐러셀 슬라이드 가이드
+- 구조: 아래 섹션 라벨을 반드시 사용하여 구분
+  [캡션] 이모지 포함, 짧은 문장, 핵심 메시지. 첫 줄에 훅
+  [캐러셀1-표지] 슬라이드 텍스트 + 비주얼 설명
+  [캐러셀2] 슬라이드 텍스트 + 비주얼 설명
+  [캐러셀3] 슬라이드 텍스트 + 비주얼 설명
+  [캐러셀4] 슬라이드 텍스트 + 비주얼 설명
+  [캐러셀5-CTA] 마지막 슬라이드 (저장/공유 유도)
+  [해시태그] 관련 해시태그 20~25개 (한글+영어)
+- 이모지 적극 활용
+- 비주얼 중심 설명
+- 짧고 임팩트 있는 문장
+
+⚠️ 출력 형식 규칙 (필수):
+- 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지
+- 일반 텍스트로만 작성
+- 섹션 구분은 [캡션], [캐러셀1-표지] 같은 대괄호 라벨만 사용`,
+  },
 };
+
+// Channels available in normal factory vs from-PR mode
+export const FACTORY_CHANNELS = ['newsletter', 'naver', 'kakao', 'pressrelease'];
+export const PR_DERIVED_CHANNELS = ['newsletter', 'naver', 'kakao', 'linkedin', 'instagram'];
 
 // =====================================================
 // Pillar Presets with Topics
@@ -300,4 +346,30 @@ ${extraContext ? `**추가 참고사항**: ${extraContext}` : ''}
 위의 회사 정보, 설문 데이터, 톤앤매너 가이드, 금지어 목록, 채널별 포맷 규칙을 모두 반영하여 바로 발행 가능한 수준의 완성본을 작성하세요.
 
 ⚠️ 중요: 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지. 일반 텍스트로만 작성하고, 섹션 구분은 [제목], [본문] 같은 대괄호 라벨만 사용할 것.`;
+}
+
+/**
+ * Build prompt for generating channel content from a press release source.
+ */
+export function buildFromPRPrompt({ prText, channelId }) {
+  const channelConfig = CHANNEL_CONFIGS[channelId];
+  if (!channelConfig) return '';
+
+  return `${BRITZMEDI_CONTEXT}
+
+${channelConfig.formatPrompt}
+
+---
+
+## 원본 보도자료 (이 내용을 기반으로 채널 콘텐츠를 작성하세요)
+
+${prText}
+
+---
+
+위 보도자료의 핵심 내용을 ${channelConfig.name} 채널의 포맷 규칙에 맞게 재구성하여 작성하세요.
+보도자료의 사실관계와 데이터를 정확히 유지하되, 해당 채널의 독자/구독자에게 맞는 톤과 형식으로 변환하세요.
+회사 정보, 톤앤매너 가이드, 금지어 목록을 반드시 준수하세요.
+
+⚠️ 중요: 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지. 일반 텍스트로만 작성하고, 섹션 구분은 대괄호 라벨만 사용할 것.`;
 }

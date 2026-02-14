@@ -18,13 +18,18 @@ export default function App() {
   const [modalContent, setModalContent] = useState(null);
   const [apiKey, setApiKey] = useLocalStorage('bm-apikey', '');
 
+  // PR → Channel content creation source
+  const [prSourceData, setPrSourceData] = useState(null);
+
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
   }, []);
 
   const handleAddContent = (newContent) => {
-    setContents([newContent, ...contents]);
-    setActivePage('pipeline');
+    setContents((prev) => [newContent, ...prev]);
+    if (!prSourceData) {
+      setActivePage('pipeline');
+    }
     showToast('콘텐츠가 추가되었습니다');
   };
 
@@ -36,6 +41,16 @@ export default function App() {
   const handleDeleteContent = (id) => {
     setContents(contents.filter((c) => c.id !== id));
     showToast('삭제되었습니다', 'info');
+  };
+
+  const handleCreateFromPR = (prItem) => {
+    setPrSourceData({
+      id: prItem.id,
+      title: prItem.title,
+      date: prItem.date,
+      draft: typeof prItem.draft === 'string' ? prItem.draft : JSON.stringify(prItem.draft),
+    });
+    setActivePage('create');
   };
 
   return (
@@ -55,11 +70,7 @@ export default function App() {
 
       <main className="max-w-[1200px] mx-auto p-3 md:p-6">
         {activePage === 'dashboard' && (
-          <Dashboard
-            contents={contents}
-            onOpenContent={setModalContent}
-            setActivePage={setActivePage}
-          />
+          <Dashboard contents={contents} onOpenContent={setModalContent} setActivePage={setActivePage} />
         )}
         {activePage === 'calendar' && (
           <Calendar contents={contents} onOpenContent={setModalContent} />
@@ -69,20 +80,19 @@ export default function App() {
             contents={contents}
             setContents={setContents}
             onOpenContent={setModalContent}
+            onCreateFromPR={handleCreateFromPR}
           />
         )}
         {activePage === 'publish' && (
-          <Publish
-            contents={contents}
-            setContents={setContents}
-            onOpenContent={setModalContent}
-          />
+          <Publish contents={contents} setContents={setContents} onOpenContent={setModalContent} />
         )}
         {activePage === 'create' && (
           <Create
             onAdd={handleAddContent}
             apiKey={apiKey}
             setApiKey={setApiKey}
+            prSourceData={prSourceData}
+            onClearPRSource={() => { setPrSourceData(null); setActivePage('pipeline'); }}
           />
         )}
       </main>

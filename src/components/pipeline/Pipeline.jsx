@@ -1,6 +1,6 @@
 import { PIPELINE_STAGES } from '../../constants';
 
-export default function Pipeline({ contents, setContents, onOpenContent }) {
+export default function Pipeline({ contents, setContents, onOpenContent, onCreateFromPR }) {
   const handleDrop = (contentId, newStage) => {
     setContents(
       contents.map((c) =>
@@ -34,38 +34,39 @@ export default function Pipeline({ contents, setContents, onOpenContent }) {
                 </span>
               </div>
               <div className="space-y-2 min-h-[120px]">
-                {items.map((item) => (
-                  <div
-                    key={item.id}
-                    draggable
-                    onDragStart={(e) =>
-                      e.dataTransfer.setData('contentId', String(item.id))
-                    }
-                    className="bg-white rounded-lg p-3 border border-pale cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                          item.track === 'A'
-                            ? 'bg-track-a/10 text-track-a'
-                            : 'bg-track-b/10 text-track-b'
-                        }`}
-                      >
-                        {item.track}
-                      </span>
-                      <span className="text-[10px] text-mist">{item.pillar}</span>
-                    </div>
+                {items.map((item) => {
+                  const isPRPublished = item.stage === 'published' && (item.pillar === 'PR' || item.channels?.pressrelease);
+                  return (
                     <div
-                      className="text-[12px] font-medium leading-snug cursor-pointer hover:text-accent"
-                      onClick={() => onOpenContent(item)}
+                      key={item.id}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData('contentId', String(item.id))}
+                      className="bg-white rounded-lg p-3 border border-pale cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow"
                     >
-                      {item.title}
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                          item.track === 'A' ? 'bg-track-a/10 text-track-a' : 'bg-track-b/10 text-track-b'
+                        }`}>{item.track}</span>
+                        <span className="text-[10px] text-mist">{item.pillar}</span>
+                      </div>
+                      <div
+                        className="text-[12px] font-medium leading-snug cursor-pointer hover:text-accent"
+                        onClick={() => onOpenContent(item)}
+                      >
+                        {item.title}
+                      </div>
+                      <div className="text-[10px] text-steel mt-1.5">{item.date}</div>
+                      {isPRPublished && onCreateFromPR && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onCreateFromPR(item); }}
+                          className="mt-2 w-full py-1.5 rounded-md text-[11px] font-semibold text-accent bg-accent/5 border border-accent/20 cursor-pointer hover:bg-accent/10 transition-colors"
+                        >
+                          채널 콘텐츠 만들기
+                        </button>
+                      )}
                     </div>
-                    <div className="text-[10px] text-steel mt-1.5">
-                      {item.date}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

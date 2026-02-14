@@ -1,18 +1,11 @@
-import { buildPrompt } from '../constants/prompts';
+import { buildPrompt, buildFromPRPrompt } from '../constants/prompts';
 
-/**
- * Generate content for a single channel.
- * Returns the raw text output from Claude.
- */
-async function generateForChannel({ pillarId, topicPrompt, channelId, extraContext, apiKey }) {
-  const prompt = buildPrompt({ pillarId, topicPrompt, channelId, extraContext });
+const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
 
-  const res = await fetch('https://britzmedi-api-proxy.mmakid.workers.dev', {
+async function callClaude(prompt, apiKey) {
+  const res = await fetch(API_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-    },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
     body: JSON.stringify({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4000,
@@ -30,8 +23,7 @@ async function generateForChannel({ pillarId, topicPrompt, channelId, extraConte
 }
 
 /**
- * Generate content for multiple channels in parallel.
- * Returns { channelId: text, ... } and { channelId: error, ... }
+ * Generate content for multiple channels in parallel (normal factory).
  */
 export async function generateMultiChannel({ pillarId, topicPrompt, channels, extraContext, apiKey }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
@@ -40,21 +32,36 @@ export async function generateMultiChannel({ pillarId, topicPrompt, channels, ex
   const results = {};
   const errors = {};
 
-  const promises = channels.map(async (channelId) => {
+  await Promise.all(channels.map(async (channelId) => {
     try {
-      const text = await generateForChannel({
-        pillarId,
-        topicPrompt,
-        channelId,
-        extraContext,
-        apiKey,
-      });
-      results[channelId] = text;
+      const prompt = buildPrompt({ pillarId, topicPrompt, channelId, extraContext });
+      results[channelId] = await callClaude(prompt, apiKey);
     } catch (e) {
       errors[channelId] = e.message;
     }
-  });
+  }));
 
-  await Promise.all(promises);
+  return { results, errors };
+}
+
+/**
+ * Generate channel content from a press release source (PR → channels).
+ */
+export async function generateFromPR({ prText, channels, apiKey }) {
+  if (!apiKey) throw new Error('API 키가 필요합니다');
+  if (!channels.length) throw new Error('채널을 선택하세요');
+
+  const results = {};
+  const errors = {};
+
+  await Promise.all(channels.map(async (channelId) => {
+    try {
+      const prompt = buildFromPRPrompt({ prText, channelId });
+      results[channelId] = await callClaude(prompt, apiKey);
+    } catch (e) {
+      errors[channelId] = e.message;
+    }
+  }));
+
   return { results, errors };
 }
