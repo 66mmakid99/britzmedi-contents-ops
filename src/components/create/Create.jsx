@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CHANNEL_CONFIGS, FACTORY_CHANNELS, PR_DERIVED_CHANNELS, PR_CATEGORIES } from '../../constants/prompts';
 import { SPOKESPERSONS, getRecommendedSpokesperson } from '../../constants/index';
+import { uploadPressReleaseImage, deletePressReleaseImage } from '../../lib/imageUpload';
 import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2, autoFixContent, generateQuoteSuggestions } from '../../lib/claude';
 import { parseSections, assembleSections, assembleTextOnly } from '../../lib/sectionUtils';
 import { generatePressReleaseDocx } from '../../lib/generatePressReleaseDocx';
@@ -38,17 +39,28 @@ function assemblePR(sections, fixed) {
 // Word/PDF export helpers
 // =====================================================
 
-/** Filter out placeholder blocks from export text */
+/** Filter out placeholder blocks and photo/attachment guide from export text */
 function filterPlaceholders(text) {
-  return text.split('\n\n')
+  // First remove photo guide and attachment guide sections entirely
+  const cleaned = text
+    .replace(/\[사진\s*가이드\][\s\S]*?(?=\[회사\s*소개\]|\[첨부|\n\n\n|$)/gi, '')
+    .replace(/\[첨부파일?\s*가이드\][\s\S]*?(?=\[회사\s*소개\]|뉴스와이어|\n\n\n|$)/gi, '')
+    .replace(/사진 가이드[\s\S]*?(?=회사 소개|첨부파일|뉴스와이어|\n\n\n|$)/gi, '')
+    .replace(/첨부파일 가이드[\s\S]*?(?=회사 소개|뉴스와이어|\n\n\n|$)/gi, '');
+  return cleaned.split('\n\n')
     .filter((block) => !block.includes('[대표 인용문 - 직접 작성 또는 확인 필요]'))
-    .map((block) => block.replace(/\[입력 필요:[^\]]*\]/g, '').replace(/\[QUOTE_PLACEHOLDER\]/g, '').trim())
+    .map((block) => block
+      .replace(/\[입력 필요:[^\]]*\]/g, '')
+      .replace(/\[QUOTE_PLACEHOLDER\]/g, '')
+      .replace(/\[인용문\]/g, '')
+      .replace(/\[대표 인용문[^\]]*\]/g, '')
+      .trim())
     .filter(Boolean)
     .join('\n\n');
 }
 
 /** Build data object from PR sections and generate .docx download */
-async function handleWordDownload(sections, prFixed, selectedQuote) {
+async function handleWordDownload(sections, prFixed, selectedQuote, images = []) {
   const getSection = (label) => sections.find((s) => s.label === label)?.text?.trim() || '';
   const getBodySections = () => {
     return sections
@@ -69,8 +81,7 @@ async function handleWordDownload(sections, prFixed, selectedQuote) {
     body: getBodySections() || getSection('전체'),
     quote: null, // quotes are now integrated into body paragraph 4
     companyIntro: getSection('회사 소개') || getSection('회사 개요'),
-    photoGuide: getListSection('사진 가이드'),
-    attachGuide: getListSection('첨부파일 가이드'),
+    images: images.map((img) => ({ url: img.file_url, caption: img.caption, width: img.width, height: img.height })),
     date: prFixed.날짜 || new Date().toISOString().split('T')[0],
     website: prFixed.웹사이트 || 'www.britzmedi.co.kr / www.britzmedi.com',
   };
@@ -136,6 +147,10 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const [spokespersonKey, setSpokespersonKey] = useState('ceo');
   const [spokespersonName, setSpokespersonName] = useState(SPOKESPERSONS.ceo.name);
 
+  // --- Image upload state ---
+  const [uploadedImages, setUploadedImages] = useState([]); // [{id, file_name, file_url, file_path, caption, position, width, height}]
+  const [imageUploading, setImageUploading] = useState(false);
+
   // Auto-recommend spokesperson when category changes
   useEffect(() => {
     const recKey = getRecommendedSpokesperson(selectedCategory);
@@ -160,11 +175,15 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   };
   const updatePrFixed = (key, val) => setPrFixed((prev) => ({ ...prev, [key]: val }));
 
-  // --- Copy all (라벨 제외) ---
+  // --- Copy all (라벨 제외, 사진/첨부가이드 제외) ---
   const handleCopyAll = (ch) => {
     const sections = editedSections[ch];
     if (!sections) return;
-    const text = ch === 'pressrelease' ? assemblePR(sections, prFixed) : assembleTextOnly(sections);
+    // Filter out photo guide and attachment guide sections
+    const filteredSections = sections.filter((s) =>
+      !(/사진\s*가이드/i.test(s.label) || /첨부파일?\s*가이드/i.test(s.label))
+    );
+    const text = ch === 'pressrelease' ? assemblePR(filteredSections, prFixed) : assembleTextOnly(filteredSections);
     navigator.clipboard?.writeText(text);
     setCopyStatus(ch);
     setTimeout(() => setCopyStatus(''), 2000);
@@ -204,6 +223,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       setSelectedQuote(null);
       setSpokespersonKey('ceo');
       setSpokespersonName(SPOKESPERSONS.ceo.name);
+      setUploadedImages([]);
+      setImageUploading(false);
     }
   };
 
@@ -340,8 +361,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         return;
       }
 
-      // Quote suggestions — if quote field is empty, generate suggestions in parallel with review
-      const quoteIsEmpty = !confirmedFields.quote || confirmedFields.quote.trim() === '';
+      // Quote suggestions — always generate alternatives (AI already put A안 in paragraph 4)
       const firstContent = Object.values(results)[0] || '';
 
       // Auto-review + quote suggestions in parallel
@@ -365,7 +385,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       })();
 
       const sp = SPOKESPERSONS[spokespersonKey];
-      const quotePromise = quoteIsEmpty ? (async () => {
+      const quotePromise = (async () => {
         try {
           setQuoteLoading(true);
           const suggestions = await generateQuoteSuggestions({
@@ -383,7 +403,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         } finally {
           setQuoteLoading(false);
         }
-      })() : Promise.resolve();
+      })();
 
       const [reviews] = await Promise.all([reviewPromise, quotePromise]);
       setV2Review(reviews);
@@ -444,17 +464,19 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     }
   };
 
-  /** Insert selected quote into content, replacing placeholder */
+  /** Replace existing quote in content with selected alternative */
   const handleSelectQuote = (quoteText) => {
+    // Find the A안 (first suggestion) text to use as search target for replacement
+    const existingQuote = selectedQuote || (quoteSuggestions[0]?.text);
     setSelectedQuote(quoteText);
-    const placeholder = '[QUOTE_PLACEHOLDER]';
+    if (!existingQuote) return;
     setEditedSections((prev) => {
       const copy = { ...prev };
       for (const ch of selectedChannels) {
         if (!copy[ch]) continue;
         copy[ch] = copy[ch].map((sec) => ({
           ...sec,
-          text: sec.text.replace(placeholder, quoteText),
+          text: sec.text.replace(existingQuote, quoteText),
         }));
       }
       return copy;
@@ -485,6 +507,48 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     } finally {
       setQuoteLoading(false);
     }
+  };
+
+  // --- Image upload handlers ---
+  const handleImageUpload = async (files) => {
+    if (!files?.length || uploadedImages.length >= 5) return;
+    setImageUploading(true);
+    const remaining = 5 - uploadedImages.length;
+    const toUpload = Array.from(files).slice(0, remaining);
+    try {
+      for (const file of toUpload) {
+        if (!file.type.startsWith('image/')) continue;
+        const { record } = await uploadPressReleaseImage(file, null, '', uploadedImages.length);
+        setUploadedImages((prev) => [...prev, record]);
+      }
+    } catch (e) {
+      console.error('Image upload failed:', e);
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleImageDelete = async (img) => {
+    try {
+      await deletePressReleaseImage(img.id, img.file_path);
+      setUploadedImages((prev) => prev.filter((i) => i.id !== img.id));
+    } catch (e) {
+      console.error('Image delete failed:', e);
+    }
+  };
+
+  const handleImageCaptionChange = (imgId, caption) => {
+    setUploadedImages((prev) => prev.map((i) => i.id === imgId ? { ...i, caption } : i));
+  };
+
+  const handleImageMove = (idx, direction) => {
+    setUploadedImages((prev) => {
+      const arr = [...prev];
+      const newIdx = idx + direction;
+      if (newIdx < 0 || newIdx >= arr.length) return arr;
+      [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+      return arr.map((item, i) => ({ ...item, position: i }));
+    });
   };
 
   /** Export: register to pipeline */
@@ -826,17 +890,19 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
                   );
                 })}
               </div>
-              {/* Editable name field */}
-              <div className="flex items-center gap-3">
-                <label className="text-[11px] text-steel whitespace-nowrap">{SPOKESPERSONS[spokespersonKey]?.role} 이름:</label>
-                <input
-                  type="text"
-                  value={spokespersonName}
-                  onChange={(e) => setSpokespersonName(e.target.value)}
-                  placeholder="이름을 입력하세요"
-                  className="flex-1 px-3 py-1.5 rounded-lg border border-pale text-[12px] outline-none focus:border-accent bg-white"
-                />
-              </div>
+              {/* Editable name field (only when nameEditable or name is empty) */}
+              {(SPOKESPERSONS[spokespersonKey]?.nameEditable || !SPOKESPERSONS[spokespersonKey]?.name) && (
+                <div className="flex items-center gap-3">
+                  <label className="text-[11px] text-steel whitespace-nowrap">{SPOKESPERSONS[spokespersonKey]?.role} 이름:</label>
+                  <input
+                    type="text"
+                    value={spokespersonName}
+                    onChange={(e) => setSpokespersonName(e.target.value)}
+                    placeholder="이름을 입력하세요"
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-pale text-[12px] outline-none focus:border-accent bg-white"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Summary: how many facts confirmed */}
@@ -909,10 +975,22 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
           )}
           {selectedQuote && (
             <div className="bg-success/5 rounded-xl p-3 border border-success/20 flex items-center justify-between">
-              <div className="text-[12px] text-success font-semibold">인용문이 본문에 삽입되었습니다</div>
+              <div className="text-[12px] text-success font-semibold">인용문이 교체되었습니다</div>
               <button onClick={() => { setSelectedQuote(null); setQuoteSuggestions([]); }}
                 className="text-[11px] text-steel border-none bg-transparent cursor-pointer hover:underline">다른 인용문 선택</button>
             </div>
+          )}
+
+          {/* Image Upload (press release only) */}
+          {isPRChannel && (
+            <ImageUploader
+              images={uploadedImages}
+              uploading={imageUploading}
+              onUpload={handleImageUpload}
+              onDelete={handleImageDelete}
+              onCaptionChange={handleImageCaptionChange}
+              onMove={handleImageMove}
+            />
           )}
 
           {/* Channel tabs */}
@@ -959,7 +1037,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             {/* PR-specific export buttons */}
             {isPRChannel && (
               <div className="flex gap-2">
-                <button onClick={() => handleWordDownload(editedSections.pressrelease || [], prFixed, selectedQuote)}
+                <button onClick={() => handleWordDownload(editedSections.pressrelease || [], prFixed, selectedQuote, uploadedImages)}
                   className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
                   Word 다운로드 (.docx)
                 </button>
@@ -1439,7 +1517,7 @@ function QuoteSuggestions({ suggestions, loading, onSelect, onRegenerate }) {
       <div className="bg-white rounded-xl p-4 border border-accent/20">
         <div className="flex items-center gap-3">
           <span className="inline-block w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-          <span className="text-[13px] font-semibold text-accent">대표 인용문 제안 생성 중...</span>
+          <span className="text-[13px] font-semibold text-accent">인용문 대안 생성 중...</span>
         </div>
       </div>
     );
@@ -1475,8 +1553,8 @@ function QuoteSuggestions({ suggestions, loading, onSelect, onRegenerate }) {
     <div className="bg-white rounded-xl p-4 border border-accent/20 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[13px] font-bold">대표 인용문 제안</div>
-          <div className="text-[11px] text-mist">AI가 기사 맥락에 맞는 인용문 3개를 제안합니다. 선택하면 본문에 자동 삽입됩니다.</div>
+          <div className="text-[13px] font-bold">인용문 대안 선택</div>
+          <div className="text-[11px] text-mist">AI가 본문에 기본 인용문(A안)을 삽입했습니다. 다른 톤을 원하면 B/C안을 선택하세요.</div>
         </div>
         <div className="flex gap-1.5">
           <button onClick={onRegenerate}
@@ -1516,6 +1594,84 @@ function LabelInput({ label, value, onChange, placeholder }) {
       <label className="block text-[11px] text-mist mb-1">{label}</label>
       <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
         className="w-full px-3 py-2 rounded-lg border border-pale text-[12px] outline-none focus:border-accent bg-white" />
+    </div>
+  );
+}
+
+function ImageUploader({ images, uploading, onUpload, onDelete, onCaptionChange, onMove }) {
+  const fileInputRef = { current: null };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    onUpload(e.dataTransfer.files);
+  };
+
+  return (
+    <div className="bg-white rounded-xl p-4 border border-pale space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[13px] font-bold">사진 첨부</div>
+          <div className="text-[11px] text-mist">보도자료에 포함할 사진을 업로드하세요 (최대 5장, JPG/PNG)</div>
+        </div>
+        <span className="text-[11px] text-steel">{images.length}/5</span>
+      </div>
+
+      {/* Upload zone */}
+      {images.length < 5 && (
+        <div
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+          onClick={() => fileInputRef.current?.click()}
+          className="border-2 border-dashed border-pale rounded-lg p-6 text-center cursor-pointer hover:border-accent/30 hover:bg-accent/5 transition-colors"
+        >
+          {uploading ? (
+            <div className="flex items-center justify-center gap-2">
+              <span className="inline-block w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+              <span className="text-[12px] text-accent">업로드 중...</span>
+            </div>
+          ) : (
+            <div className="text-[12px] text-mist">
+              클릭하거나 파일을 드래그하여 업로드
+            </div>
+          )}
+          <input
+            ref={(el) => { fileInputRef.current = el; }}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={(e) => { onUpload(e.target.files); e.target.value = ''; }}
+          />
+        </div>
+      )}
+
+      {/* Image list */}
+      {images.length > 0 && (
+        <div className="space-y-2">
+          {images.map((img, idx) => (
+            <div key={img.id} className="flex gap-3 p-2.5 rounded-lg border border-pale bg-snow">
+              <img src={img.file_url} alt={img.file_name} className="w-16 h-16 object-cover rounded-lg shrink-0" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="text-[11px] text-mist truncate">{img.file_name}</div>
+                <input
+                  type="text"
+                  value={img.caption || ''}
+                  onChange={(e) => onCaptionChange(img.id, e.target.value)}
+                  placeholder="사진 캡션 입력..."
+                  className="w-full px-2 py-1 rounded border border-pale text-[11px] outline-none focus:border-accent bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1 shrink-0">
+                <button onClick={() => onMove(idx, -1)} disabled={idx === 0}
+                  className={`w-6 h-6 rounded text-[10px] border border-pale cursor-pointer ${idx === 0 ? 'text-pale bg-snow cursor-not-allowed' : 'text-steel bg-white hover:bg-snow'}`}>▲</button>
+                <button onClick={() => onMove(idx, 1)} disabled={idx === images.length - 1}
+                  className={`w-6 h-6 rounded text-[10px] border border-pale cursor-pointer ${idx === images.length - 1 ? 'text-pale bg-snow cursor-not-allowed' : 'text-steel bg-white hover:bg-snow'}`}>▼</button>
+                <button onClick={() => onDelete(img)}
+                  className="w-6 h-6 rounded text-[10px] text-danger border border-danger/20 bg-danger/5 cursor-pointer hover:bg-danger/10">✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

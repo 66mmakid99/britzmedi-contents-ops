@@ -2,7 +2,7 @@
 // Press Release .docx Generator — docx-js
 // =====================================================
 import {
-  Document, Packer, Paragraph, TextRun,
+  Document, Packer, Paragraph, TextRun, ImageRun,
   Table, TableRow, TableCell,
   Header, Footer,
   AlignmentType, WidthType, ShadingType, BorderStyle,
@@ -116,23 +116,25 @@ function numberedTable(headerText, items) {
  * @param {string} data.title
  * @param {string} data.subtitle
  * @param {string} data.body       - 본문 (문단은 \n\n으로 구분)
- * @param {string|null} data.quote - 선택된 인용문
  * @param {string} data.companyIntro
- * @param {string[]} data.photoGuide
- * @param {string[]} data.attachGuide
- * @param {string} data.tags
+ * @param {object[]} [data.images] - 업로드된 이미지 배열 [{url, caption, width, height}]
  * @param {string} data.date
  * @param {string} data.website
  */
 export async function generatePressReleaseDocx(data) {
-  // Filter out placeholder text
+  // Filter out placeholder text + photo/attachment guide sections
   const cleanBody = (data.body || '')
-    .replace(/\[대표 인용문 - 직접 작성 또는 확인 필요\]/g, '')
+    .replace(/\[대표 인용문[^\]]*\]/g, '')
     .replace(/\[QUOTE_PLACEHOLDER\]/g, '')
+    .replace(/\[인용문\]/g, '')
     .replace(/\[입력 필요:[^\]]*\]/g, '')
     .replace(/\[태그[:\s].*?\]/g, '')
     .replace(/\n태그[:\s].*$/gm, '')
     .replace(/\n#\S+(\s+#\S+)*/g, '')
+    .replace(/\[사진\s*가이드\][\s\S]*?(?=\[회사\s*소개\]|\[첨부|\n\n\n|$)/gi, '')
+    .replace(/\[첨부파일?\s*가이드\][\s\S]*?(?=\[회사\s*소개\]|뉴스와이어|\n\n\n|$)/gi, '')
+    .replace(/사진 가이드[\s\S]*?(?=회사 소개|첨부파일|뉴스와이어|\n\n\n|$)/gi, '')
+    .replace(/첨부파일 가이드[\s\S]*?(?=회사 소개|뉴스와이어|\n\n\n|$)/gi, '')
     .trim();
 
   const bodyParagraphs = cleanBody.split('\n\n').filter(Boolean).map((para) =>
@@ -143,14 +145,37 @@ export async function generatePressReleaseDocx(data) {
   );
 
   // Quotes are now integrated into body paragraph 4, no separate section needed
+  // Photo guide and attachment guide are removed from Word export
 
-  const photoSection = data.photoGuide?.length > 0
-    ? [new Paragraph({ spacing: { before: 300 }, children: [] }), numberedTable('사진 가이드', data.photoGuide)]
-    : [];
-
-  const attachSection = data.attachGuide?.length > 0
-    ? [new Paragraph({ spacing: { before: 200 }, children: [] }), numberedTable('첨부파일 가이드', data.attachGuide)]
-    : [];
+  // Fetch and prepare images for embedding
+  const imageParagraphs = [];
+  if (data.images?.length > 0) {
+    for (const img of data.images) {
+      try {
+        const res = await fetch(img.url);
+        const buf = await res.arrayBuffer();
+        // Scale to fit content width (max ~500px / ~6667 DXA)
+        const maxW = 500;
+        const scale = img.width > maxW ? maxW / img.width : 1;
+        const w = Math.round((img.width || 400) * scale);
+        const h = Math.round((img.height || 300) * scale);
+        imageParagraphs.push(
+          new Paragraph({ spacing: { before: 200 }, children: [] }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: buf, transformation: { width: w, height: h }, type: 'png' })],
+          }),
+        );
+        if (img.caption) {
+          imageParagraphs.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+            children: [new TextRun({ text: img.caption, font: 'Malgun Gothic', size: 18, color: '666666', italics: true })],
+          }));
+        }
+      } catch { /* skip failed image */ }
+    }
+  }
 
   const doc = new Document({
     styles: {
@@ -223,11 +248,8 @@ export async function generatePressReleaseDocx(data) {
         // ■ 본문 (인용문은 본문 4번째 문단에 통합됨)
         ...bodyParagraphs,
 
-        // ■ 사진 가이드
-        ...photoSection,
-
-        // ■ 첨부파일 가이드
-        ...attachSection,
+        // ■ 사진
+        ...imageParagraphs,
 
         // ■ 구분선
         new Paragraph({

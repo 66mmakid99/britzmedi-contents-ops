@@ -45,10 +45,10 @@ export const CONTENT_PILLARS = {
 
 // Spokesperson roles for quote attribution
 export const SPOKESPERSONS = {
-  ceo: { role: 'CEO', title: '대표이사', name: '이신재', bestFor: ['partnership', 'award', 'general'] },
-  cto: { role: 'CTO', title: '최고기술책임자', name: '', bestFor: ['product_launch', 'certification'] },
-  cmo: { role: 'CMO', title: '마케팅총괄', name: '이성호', bestFor: ['exhibition'] },
-  cfo: { role: 'CFO', title: '최고재무책임자', name: '', bestFor: [] },
+  ceo: { role: 'CEO', title: '대표이사', name: '이신재', nameEditable: false, bestFor: ['partnership', 'award', 'general'] },
+  cto: { role: 'CTO', title: '기술이사', name: '', nameEditable: true, bestFor: ['product_launch', 'certification'] },
+  cmo: { role: 'CMO', title: '마케팅총괄', name: '이성호', nameEditable: true, bestFor: ['exhibition'] },
+  cfo: { role: 'CFO', title: '재무이사', name: '', nameEditable: true, bestFor: ['general'] },
 };
 
 /** Get recommended spokesperson key based on category */
