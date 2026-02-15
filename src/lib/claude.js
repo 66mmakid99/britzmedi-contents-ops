@@ -1,4 +1,5 @@
-import { buildPrompt, buildFromPRPrompt, buildReviewPrompt, buildParsingPrompt, buildFactBasedPrompt, buildV2ReviewPrompt } from '../constants/prompts';
+import { buildPrompt, buildFromPRPrompt, buildReviewPrompt, buildParsingPrompt, buildFactBasedPrompt, buildV2ReviewPrompt, buildQuoteSuggestionsPrompt } from '../constants/prompts';
+import { formatKBForPrompt } from '../constants/knowledgeBase';
 
 const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
 
@@ -116,11 +117,13 @@ export async function parseContent({ sourceText, apiKey }) {
 
 /**
  * STEP 3: Generate content from confirmed facts for a single channel.
+ * Accepts knowledgeBase entries for automatic KB inclusion in prompt.
  * Returns generated text string.
  */
-export async function generateFromFacts({ category, confirmedFields, timing, channelId, apiKey }) {
+export async function generateFromFacts({ category, confirmedFields, timing, channelId, apiKey, knowledgeBase }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
-  const prompt = buildFactBasedPrompt({ category, confirmedFields, timing, channelId });
+  const kbText = knowledgeBase ? formatKBForPrompt(knowledgeBase) : '';
+  const prompt = buildFactBasedPrompt({ category, confirmedFields, timing, channelId, kbText });
   return await callClaude(prompt, apiKey, 4000);
 }
 
@@ -134,5 +137,18 @@ export async function reviewV2({ content, confirmedFields, channelId, apiKey }) 
   const raw = await callClaude(prompt, apiKey, 2000);
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('검수 결과를 해석할 수 없습니다');
+  return JSON.parse(jsonMatch[0]);
+}
+
+/**
+ * Generate 3 CEO quote suggestions based on context.
+ * Returns [{ label, tone, text }, ...]
+ */
+export async function generateQuoteSuggestions({ category, confirmedFields, generatedContent, timing, apiKey }) {
+  if (!apiKey) throw new Error('API 키가 필요합니다');
+  const prompt = buildQuoteSuggestionsPrompt({ category, confirmedFields, generatedContent, timing });
+  const raw = await callClaude(prompt, apiKey, 1500);
+  const jsonMatch = raw.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error('인용문 생성 결과를 해석할 수 없습니다');
   return JSON.parse(jsonMatch[0]);
 }

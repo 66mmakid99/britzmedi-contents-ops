@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CHANNEL_CONFIGS, FACTORY_CHANNELS, PR_DERIVED_CHANNELS, PR_CATEGORIES } from '../../constants/prompts';
-import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2 } from '../../lib/claude';
+import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2, generateQuoteSuggestions } from '../../lib/claude';
 
 // v2 step labels for the stepper
 const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수', '결과'];
@@ -101,7 +101,7 @@ p{margin:6px 0;} @media print{body{margin:0;max-width:100%;}}</style></head>
 // =====================================================
 // Main Component
 // =====================================================
-export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClearPRSource }) {
+export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClearPRSource, knowledgeBase }) {
   // --- Shared state ---
   const [selectedChannels, setSelectedChannels] = useState([]);
   const [showKey, setShowKey] = useState(false);
@@ -127,6 +127,11 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const [v2Content, setV2Content] = useState({});
   const [v2Review, setV2Review] = useState({});
   const [v2Error, setV2Error] = useState('');
+
+  // --- Quote suggestions state ---
+  const [quoteSuggestions, setQuoteSuggestions] = useState([]);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState(null);
 
   const isFromPR = !!prSourceData;
 
@@ -188,6 +193,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       setV2Content({});
       setV2Review({});
       setV2Error('');
+      setQuoteSuggestions([]);
+      setQuoteLoading(false);
+      setSelectedQuote(null);
     }
   };
 
@@ -276,7 +284,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     }
   };
 
-  /** STEP 2 → 3 → 4 → 5: Generate + Review */
+  /** STEP 2 → 3 → 4 → 5: Generate + Review + Quote suggestions */
   const handleV2Generate = async () => {
     if (!apiKey) { setShowKey(true); return; }
     if (!selectedChannels.length) return;
@@ -284,10 +292,12 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setV2Error('');
     setRegistered(false);
     setCopyStatus('');
+    setQuoteSuggestions([]);
+    setSelectedQuote(null);
     setPrFixed((prev) => ({ ...prev, 날짜: new Date().toISOString().split('T')[0] }));
 
     try {
-      // Generate for each channel
+      // Generate for each channel (with knowledge base)
       const results = {};
       const errors = {};
       await Promise.all(selectedChannels.map(async (ch) => {
@@ -298,6 +308,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             timing,
             channelId: ch,
             apiKey,
+            knowledgeBase,
           });
         } catch (e) {
           errors[ch] = e.message;
@@ -320,27 +331,94 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         return;
       }
 
-      // Auto-review
+      // Quote suggestions — if quote field is empty, generate suggestions in parallel with review
+      const quoteIsEmpty = !confirmedFields.quote || confirmedFields.quote.trim() === '';
+      const firstContent = Object.values(results)[0] || '';
+
+      // Auto-review + quote suggestions in parallel
       setV2Step('reviewing');
-      const reviews = {};
-      await Promise.all(selectedChannels.map(async (ch) => {
-        if (!results[ch]) return;
+      const reviewPromise = (async () => {
+        const reviews = {};
+        await Promise.all(selectedChannels.map(async (ch) => {
+          if (!results[ch]) return;
+          try {
+            reviews[ch] = await reviewV2({
+              content: results[ch],
+              confirmedFields,
+              channelId: ch,
+              apiKey,
+            });
+          } catch {
+            reviews[ch] = { summary: { critical: 0, warning: 0, factRatio: '검수 실패' }, issues: [] };
+          }
+        }));
+        return reviews;
+      })();
+
+      const quotePromise = quoteIsEmpty ? (async () => {
         try {
-          reviews[ch] = await reviewV2({
-            content: results[ch],
+          setQuoteLoading(true);
+          const suggestions = await generateQuoteSuggestions({
+            category: selectedCategory,
             confirmedFields,
-            channelId: ch,
+            generatedContent: firstContent,
+            timing,
             apiKey,
           });
+          setQuoteSuggestions(Array.isArray(suggestions) ? suggestions : []);
         } catch {
-          reviews[ch] = { summary: { critical: 0, warning: 0, factRatio: '검수 실패' }, issues: [] };
+          setQuoteSuggestions([]);
+        } finally {
+          setQuoteLoading(false);
         }
-      }));
+      })() : Promise.resolve();
+
+      const [reviews] = await Promise.all([reviewPromise, quotePromise]);
       setV2Review(reviews);
       setV2Step('results');
     } catch (e) {
       setV2Error(`오류: ${e.message}`);
       setV2Step('confirm');
+    }
+  };
+
+  /** Insert selected quote into content, replacing placeholder */
+  const handleSelectQuote = (quoteText) => {
+    setSelectedQuote(quoteText);
+    const placeholder = '[대표 인용문 - 직접 작성 또는 확인 필요]';
+    setEditedSections((prev) => {
+      const copy = { ...prev };
+      for (const ch of selectedChannels) {
+        if (!copy[ch]) continue;
+        copy[ch] = copy[ch].map((sec) => ({
+          ...sec,
+          text: sec.text.replace(placeholder, quoteText),
+        }));
+      }
+      return copy;
+    });
+  };
+
+  /** Regenerate quote suggestions */
+  const handleRegenerateQuotes = async () => {
+    if (!apiKey) return;
+    const firstContent = Object.values(v2Content)[0] || '';
+    setQuoteLoading(true);
+    setQuoteSuggestions([]);
+    setSelectedQuote(null);
+    try {
+      const suggestions = await generateQuoteSuggestions({
+        category: selectedCategory,
+        confirmedFields,
+        generatedContent: firstContent,
+        timing,
+        apiKey,
+      });
+      setQuoteSuggestions(Array.isArray(suggestions) ? suggestions : []);
+    } catch {
+      setQuoteSuggestions([]);
+    } finally {
+      setQuoteLoading(false);
     }
   };
 
@@ -685,6 +763,23 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         <div className="space-y-4">
           {/* Review Summary (v2) */}
           <ReviewSummaryV2 v2Review={v2Review} selectedChannels={selectedChannels} />
+
+          {/* Quote Suggestions (if quote was empty) */}
+          {(quoteSuggestions.length > 0 || quoteLoading) && !selectedQuote && (
+            <QuoteSuggestions
+              suggestions={quoteSuggestions}
+              loading={quoteLoading}
+              onSelect={handleSelectQuote}
+              onRegenerate={handleRegenerateQuotes}
+            />
+          )}
+          {selectedQuote && (
+            <div className="bg-success/5 rounded-xl p-3 border border-success/20 flex items-center justify-between">
+              <div className="text-[12px] text-success font-semibold">인용문이 본문에 삽입되었습니다</div>
+              <button onClick={() => { setSelectedQuote(null); setQuoteSuggestions([]); }}
+                className="text-[11px] text-steel border-none bg-transparent cursor-pointer hover:underline">다른 인용문 선택</button>
+            </div>
+          )}
 
           {/* Channel tabs */}
           {selectedChannels.length > 1 && (
@@ -1169,6 +1264,86 @@ function SectionField({ label, value, onChange, rows = 3 }) {
       <label className="block text-[12px] font-semibold text-slate mb-1.5">[{label}]</label>
       <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={rows}
         className="w-full px-4 py-3 rounded-lg border border-pale text-[13px] leading-[1.7] outline-none focus:border-accent bg-snow resize-y" />
+    </div>
+  );
+}
+
+function QuoteSuggestions({ suggestions, loading, onSelect, onRegenerate }) {
+  const [customMode, setCustomMode] = useState(false);
+  const [customText, setCustomText] = useState('');
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl p-4 border border-accent/20">
+        <div className="flex items-center gap-3">
+          <span className="inline-block w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+          <span className="text-[13px] font-semibold text-accent">대표 인용문 제안 생성 중...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (customMode) {
+    return (
+      <div className="bg-white rounded-xl p-4 border border-accent/20 space-y-3">
+        <div className="text-[13px] font-bold">대표 인용문 직접 작성</div>
+        <textarea
+          value={customText}
+          onChange={(e) => setCustomText(e.target.value)}
+          placeholder='이신재 브릿츠메디 대표는 "..." 이라고 밝혔다.'
+          rows={3}
+          className="w-full px-3 py-2 rounded-lg border border-pale text-[12px] leading-[1.6] outline-none focus:border-accent bg-snow resize-y"
+        />
+        <div className="flex gap-2">
+          <button onClick={() => setCustomMode(false)}
+            className="px-3 py-2 rounded-lg text-[12px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">AI 제안 보기</button>
+          <button onClick={() => { if (customText.trim()) onSelect(customText.trim()); }}
+            disabled={!customText.trim()}
+            className={`flex-1 py-2 rounded-lg text-[12px] font-semibold border-none cursor-pointer ${
+              customText.trim() ? 'bg-accent text-white hover:bg-accent-dim' : 'bg-pale text-mist cursor-not-allowed'
+            }`}>본문에 삽입</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!suggestions || suggestions.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl p-4 border border-accent/20 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[13px] font-bold">대표 인용문 제안</div>
+          <div className="text-[11px] text-mist">AI가 기사 맥락에 맞는 인용문 3개를 제안합니다. 선택하면 본문에 자동 삽입됩니다.</div>
+        </div>
+        <div className="flex gap-1.5">
+          <button onClick={onRegenerate}
+            className="px-2.5 py-1.5 rounded-lg text-[11px] text-accent bg-accent/5 border border-accent/20 cursor-pointer hover:bg-accent/10">다시 생성</button>
+          <button onClick={() => setCustomMode(true)}
+            className="px-2.5 py-1.5 rounded-lg text-[11px] text-steel bg-snow border border-pale cursor-pointer hover:bg-pale">직접 작성</button>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {suggestions.map((q, i) => (
+          <div key={i} className="rounded-lg border border-pale p-3 hover:border-accent/30 transition-colors">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-accent/10 text-accent">
+                    {q.label}안
+                  </span>
+                  <span className="text-[10px] text-mist">{q.tone}</span>
+                </div>
+                <div className="text-[12px] text-slate leading-relaxed">{q.text}</div>
+              </div>
+              <button onClick={() => onSelect(q.text)}
+                className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white bg-accent border-none cursor-pointer hover:bg-accent-dim">
+                선택
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

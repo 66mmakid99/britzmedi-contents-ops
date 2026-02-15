@@ -681,7 +681,7 @@ ${sourceText}
 /**
  * STEP 3: Generate content from confirmed facts only.
  */
-export function buildFactBasedPrompt({ category, confirmedFields, timing, channelId }) {
+export function buildFactBasedPrompt({ category, confirmedFields, timing, channelId, kbText }) {
   const channelConfig = CHANNEL_CONFIGS[channelId];
   if (!channelConfig) return '';
 
@@ -696,16 +696,20 @@ export function buildFactBasedPrompt({ category, confirmedFields, timing, channe
     })
     .join('\n');
 
+  const kbSection = kbText ? '\n' + kbText + '\n' : '';
+
   return `${BRITZMEDI_CONTEXT}
 
 ${channelConfig.formatPrompt}
-
+${kbSection}
 ---
 
 ## 팩트 전용 생성 규칙 (FACT-ONLY)
 
 아래 "확인된 팩트"에 나열된 사실만 사용하여 콘텐츠를 작성하세요.
 확인된 팩트에 없는 내용은 절대 추가하지 마세요.
+지식 베이스에 등록된 회사/제품/기술 정보는 검증된 정보이므로 정확히 참조하세요.
+지식 베이스에 없는 정보는 [입력 필요]로 표시하세요.
 
 ### 확인된 팩트
 카테고리: ${catDef?.label || category}
@@ -803,4 +807,60 @@ ${content}
 
 severity는 "red"(반드시 수정) 또는 "yellow"(확인 권장)만 사용.
 문제가 없으면 issues를 빈 배열로, summary의 critical/warning은 0으로 반환.`;
+}
+
+// =====================================================
+// Quote Suggestions Prompt
+// =====================================================
+
+/**
+ * Generate 3 quote suggestions for the CEO when quote field is empty.
+ */
+export function buildQuoteSuggestionsPrompt({ category, confirmedFields, generatedContent, timing }) {
+  const catDef = PR_CATEGORIES[category];
+
+  const factsRef = Object.entries(confirmedFields || {})
+    .filter(([, val]) => val !== null && val !== '' && val !== undefined)
+    .map(([key, val]) => {
+      const fieldDef = catDef?.fields.find((f) => f.key === key);
+      return `- ${fieldDef?.label || key}: ${val}`;
+    })
+    .join('\n');
+
+  return `당신은 BRITZMEDI 보도자료의 대표 인용문 전문 작성가입니다.
+아래 보도자료 본문과 확인된 팩트를 분석하여, "이신재 브릿츠메디 대표" 명의로 자연스러운 인용문 3개를 제안하세요.
+
+## 카테고리
+${catDef?.label || category}
+
+## 시점
+${timing === 'pre' ? '예고형 (미래 시제)' : '리뷰형 (과거 시제)'}
+
+## 확인된 팩트
+${factsRef || '(없음)'}
+
+## 생성된 보도자료 본문
+${generatedContent}
+
+## 인용문 작성 규칙
+1. 보도체 어미 사용: "~라고 밝혔다", "~라고 말했다", "~라고 전했다"
+2. 의료법 금지어 절대 사용 금지 (극대화, 최소화, 완벽한, 획기적인, 혁명적인, 완치, 100%, 확실한 효과, 부작용 없음 등)
+3. 본문에 이미 나온 내용을 그대로 반복하지 말고, 대표의 시각/비전/포부를 담을 것
+4. 2~3문장으로 작성
+5. 확인된 팩트 범위 내에서만 언급 (없는 사실 만들지 않음)
+6. ${timing === 'pre' ? '미래 시제로 작성 ("~하겠다", "~할 것이다")' : '과거/현재 시제로 작성 ("~했다", "~하고 있다")'}
+
+## 3가지 톤
+- A안: 성과/자부심 강조 ("이번 OO은 브릿츠메디의 OO을 보여주는 성과다")
+- B안: 비전/미래 강조 ("앞으로도 OO 분야에서 OO에 기여하겠다")
+- C안: 파트너/시장 강조 ("OO과의 협력을 통해 OO 시장에서 OO을 강화할 것")
+
+## 출력 형식
+반드시 아래 JSON 배열만 출력하세요. 다른 텍스트 없이:
+
+[
+  { "label": "A", "tone": "성과/자부심", "text": "이신재 브릿츠메디 대표는 \\"인용문 내용\\" 이라고 밝혔다." },
+  { "label": "B", "tone": "비전/미래", "text": "이신재 브릿츠메디 대표는 \\"인용문 내용\\" 이라고 말했다." },
+  { "label": "C", "tone": "파트너/시장", "text": "이신재 브릿츠메디 대표는 \\"인용문 내용\\" 이라고 전했다." }
+]`;
 }

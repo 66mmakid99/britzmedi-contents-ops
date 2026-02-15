@@ -4,6 +4,7 @@ export const NAV_ITEMS = [
   { id: 'pipeline', label: '파이프라인', icon: '⇄' },
   { id: 'publish', label: '발행관리', icon: '▤' },
   { id: 'create', label: '콘텐츠제작', icon: '＋' },
+  { id: 'knowledge', label: '지식베이스', icon: '◉' },
 ];
 
 export const PIPELINE_STAGES = [

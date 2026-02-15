@@ -8,8 +8,10 @@ import Calendar from './components/calendar/Calendar';
 import Pipeline from './components/pipeline/Pipeline';
 import Publish from './components/publish/Publish';
 import Create from './components/create/Create';
+import KnowledgeBase from './components/knowledge/KnowledgeBase';
 import useLocalStorage from './hooks/useLocalStorage';
 import { DEMO_CONTENTS } from './constants';
+import { DEFAULT_KB_ENTRIES } from './constants/knowledgeBase';
 
 export default function App() {
   const [activePage, setActivePage] = useState('dashboard');
@@ -17,6 +19,9 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [modalContent, setModalContent] = useState(null);
   const [apiKey, setApiKey] = useLocalStorage('bm-apikey', '');
+
+  // Knowledge Base
+  const [kbEntries, setKbEntries] = useLocalStorage('bm-knowledge-base', DEFAULT_KB_ENTRIES);
 
   // PR → Channel content creation source
   const [prSourceData, setPrSourceData] = useState(null);
@@ -93,7 +98,11 @@ export default function App() {
             setApiKey={setApiKey}
             prSourceData={prSourceData}
             onClearPRSource={() => { setPrSourceData(null); setActivePage('pipeline'); }}
+            knowledgeBase={kbEntries}
           />
+        )}
+        {activePage === 'knowledge' && (
+          <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} />
         )}
       </main>
 
