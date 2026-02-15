@@ -1,4 +1,4 @@
-import { buildPrompt, buildFromPRPrompt, buildReviewPrompt, buildParsingPrompt, buildFactBasedPrompt, buildV2ReviewPrompt, buildQuoteSuggestionsPrompt } from '../constants/prompts';
+import { buildPrompt, buildFromPRPrompt, buildReviewPrompt, buildParsingPrompt, buildFactBasedPrompt, buildV2ReviewPrompt, buildAutoFixPrompt, buildQuoteSuggestionsPrompt } from '../constants/prompts';
 import { formatKBForPrompt } from '../constants/knowledgeBase';
 
 const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
@@ -137,6 +137,20 @@ export async function reviewV2({ content, confirmedFields, channelId, apiKey }) 
   const raw = await callClaude(prompt, apiKey, 2000);
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('검수 결과를 해석할 수 없습니다');
+  return JSON.parse(jsonMatch[0]);
+}
+
+/**
+ * STEP 4.5: Auto-fix content based on review issues.
+ * Returns { fixedContent, fixes[], needsInput[] }
+ */
+export async function autoFixContent({ content, issues, confirmedFields, channelId, apiKey, knowledgeBase }) {
+  if (!apiKey) throw new Error('API 키가 필요합니다');
+  const kbText = knowledgeBase ? formatKBForPrompt(knowledgeBase) : '';
+  const prompt = buildAutoFixPrompt({ content, issues, confirmedFields, channelId, kbText });
+  const raw = await callClaude(prompt, apiKey, 4000);
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('자동 수정 결과를 해석할 수 없습니다');
   return JSON.parse(jsonMatch[0]);
 }
 

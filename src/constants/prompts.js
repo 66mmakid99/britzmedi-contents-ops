@@ -810,6 +810,80 @@ severity는 "red"(반드시 수정) 또는 "yellow"(확인 권장)만 사용.
 }
 
 // =====================================================
+// Auto-Fix Prompt — 4th API call: fix issues found in review
+// =====================================================
+
+/**
+ * STEP 4.5: Auto-fix content based on review issues.
+ * Returns { fixedContent, fixes[], needsInput[] }
+ */
+export function buildAutoFixPrompt({ content, issues, confirmedFields, channelId, kbText }) {
+  const channelConfig = CHANNEL_CONFIGS[channelId];
+
+  const issuesText = issues
+    .filter((i) => i.category !== '팩트 비율')
+    .map((i, idx) => `${idx + 1}. [${i.severity === 'red' ? '🔴' : '🟡'}] [${i.category}] ${i.message}${i.quote ? ` (원문: "${i.quote}")` : ''}${i.section ? ` [섹션: ${i.section}]` : ''}`)
+    .join('\n');
+
+  const factsRef = Object.entries(confirmedFields || {})
+    .filter(([, val]) => val !== null && val !== '' && val !== undefined)
+    .map(([key, val]) => `- ${key}: ${val}`)
+    .join('\n');
+
+  return `당신은 BRITZMEDI 콘텐츠 자동 수정 전문가입니다.
+AI 검수에서 발견된 문제를 자동으로 수정하여 완성본을 만드세요.
+
+## 확인된 팩트 (이 사실만 사용 가능)
+${factsRef || '(없음)'}
+${kbText ? `\n## 지식 베이스 (참조 가능한 검증된 정보)\n${kbText}\n` : ''}
+## 채널
+${channelConfig?.name || channelId}
+
+## 검수에서 발견된 문제
+${issuesText || '(수정 대상 이슈 없음)'}
+
+## 수정 대상 콘텐츠
+${content}
+
+## 수정 규칙
+1. 각 이슈를 분석하고 AI가 수정할 수 있는 것은 모두 수정하세요.
+2. 수정 가능한 이슈:
+   - "출처 없는 내용" / "소스에 근거 없음" → 해당 문장을 삭제하거나 확인된 팩트/지식 베이스 정보로 대체
+   - 의료법 금지어 → 허용 표현으로 교체 (극대화→개선, 최소화→감소, 완벽한→우수한, 획기적인→주목할 만한, 혁명적인→새로운)
+   - 영문 표기 규칙 위반 → 첫 등장 시 "국문(영문)" 형태로 수정, 이후 국문만
+   - 시제 불일치 → 올바른 시제로 수정
+   - "RF 마이크로니들링" → "TOROIDAL 고주파 기반 EBD"
+   - 장문(60자 초과) → 문장 분리
+   - 내용 중복 → 중복 제거
+   - 효능 단정 → 완화 표현으로 수정 ("~를 치료합니다" → "~에 도움이 될 수 있습니다")
+   - 비교 광고 → 타사 언급 제거
+3. 수정 불가능한 이슈 (사용자 입력 필요):
+   - 확인된 팩트와 지식 베이스 어디에도 없는 정보가 필요한 경우
+   - 이 경우 해당 부분을 [입력 필요: 구체적 설명] 플레이스홀더로 표시
+4. [대표 인용문 - 직접 작성 또는 확인 필요] 플레이스홀더는 절대 수정하지 마세요 (별도 기능으로 처리됨).
+5. 수정된 콘텐츠는 원래 섹션 라벨([제목], [본문] 등)을 그대로 유지하세요.
+6. 마크다운 문법 절대 사용 금지. 일반 텍스트만.
+
+## 출력 형식
+반드시 아래 JSON 형식만 출력하세요. 다른 텍스트 없이 JSON만:
+
+{
+  "fixedContent": "수정된 전체 콘텐츠 (섹션 라벨 포함, 원본과 동일한 구조)",
+  "fixes": [
+    { "type": "auto", "description": "수정 설명 (예: \\"콜라겐 리모델링 촉진\\" 삭제 — 소스에 없는 내용)" }
+  ],
+  "needsInput": [
+    { "type": "input", "description": "입력이 필요한 이유", "placeholder": "[입력 필요: 구체적 설명]" }
+  ]
+}
+
+- fixes: AI가 자동으로 수정 완료한 항목들 (이미 fixedContent에 반영됨)
+- needsInput: 사용자 입력이 필요한 항목들 (fixedContent에 플레이스홀더로 표시됨)
+- fixes나 needsInput이 없으면 빈 배열 []
+- 수정할 내용이 없으면 fixedContent에 원본을 그대로, fixes와 needsInput을 빈 배열로`;
+}
+
+// =====================================================
 // Quote Suggestions Prompt
 // =====================================================
 

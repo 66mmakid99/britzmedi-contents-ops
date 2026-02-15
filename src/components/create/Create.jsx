@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { CHANNEL_CONFIGS, FACTORY_CHANNELS, PR_DERIVED_CHANNELS, PR_CATEGORIES } from '../../constants/prompts';
-import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2, generateQuoteSuggestions } from '../../lib/claude';
+import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2, autoFixContent, generateQuoteSuggestions } from '../../lib/claude';
 
 // v2 step labels for the stepper
-const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수', '결과'];
-const V2_STEP_INDEX = { input: 0, parsing: 1, confirm: 2, generating: 3, reviewing: 4, results: 5 };
+const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수/수정', '결과'];
+const V2_STEP_INDEX = { input: 0, parsing: 1, confirm: 2, generating: 3, reviewing: 4, fixing: 4, results: 5 };
 
 // =====================================================
 // Press Release fixed fields (NewsWire form defaults)
@@ -127,6 +127,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const [v2Content, setV2Content] = useState({});
   const [v2Review, setV2Review] = useState({});
   const [v2Error, setV2Error] = useState('');
+  const [v2FixReport, setV2FixReport] = useState({});
 
   // --- Quote suggestions state ---
   const [quoteSuggestions, setQuoteSuggestions] = useState([]);
@@ -139,11 +140,6 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const hasRedIssues = Object.values(reviewResults).some(
     (issues) => issues.some((i) => i.severity === 'red')
   );
-  // Derived: red issues for v2 mode
-  const v2HasRedIssues = Object.values(v2Review).some(
-    (r) => r.issues?.some((i) => i.severity === 'red')
-  );
-
   // --- Section edit helpers ---
   const updateSection = (ch, idx, newText) => {
     setEditedSections((prev) => {
@@ -193,6 +189,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       setV2Content({});
       setV2Review({});
       setV2Error('');
+      setV2FixReport({});
       setQuoteSuggestions([]);
       setQuoteLoading(false);
       setSelectedQuote(null);
@@ -292,6 +289,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setV2Error('');
     setRegistered(false);
     setCopyStatus('');
+    setV2FixReport({});
     setQuoteSuggestions([]);
     setSelectedQuote(null);
     setPrFixed((prev) => ({ ...prev, 날짜: new Date().toISOString().split('T')[0] }));
@@ -375,6 +373,56 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
 
       const [reviews] = await Promise.all([reviewPromise, quotePromise]);
       setV2Review(reviews);
+
+      // Check if any channel has fixable issues
+      const hasIssues = selectedChannels.some((ch) =>
+        reviews[ch]?.issues?.some((i) => i.category !== '팩트 비율')
+      );
+
+      if (hasIssues) {
+        // Auto-fix step (4th API call)
+        setV2Step('fixing');
+        const fixResults = {};
+        await Promise.all(selectedChannels.map(async (ch) => {
+          const review = reviews[ch];
+          if (!review?.issues?.length) return;
+          try {
+            fixResults[ch] = await autoFixContent({
+              content: results[ch],
+              issues: review.issues,
+              confirmedFields,
+              channelId: ch,
+              apiKey,
+              knowledgeBase,
+            });
+          } catch {
+            fixResults[ch] = null;
+          }
+        }));
+
+        setV2FixReport(fixResults);
+
+        // Update editedSections and v2Content with fixed content
+        setEditedSections((prev) => {
+          const copy = { ...prev };
+          for (const [ch, fixResult] of Object.entries(fixResults)) {
+            if (fixResult?.fixedContent) {
+              copy[ch] = parseSections(fixResult.fixedContent);
+            }
+          }
+          return copy;
+        });
+        setV2Content((prev) => {
+          const copy = { ...prev };
+          for (const [ch, fixResult] of Object.entries(fixResults)) {
+            if (fixResult?.fixedContent) {
+              copy[ch] = fixResult.fixedContent;
+            }
+          }
+          return copy;
+        });
+      }
+
       setV2Step('results');
     } catch (e) {
       setV2Error(`오류: ${e.message}`);
@@ -750,10 +798,13 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       )}
 
       {/* ============================== */}
-      {/* STEP 4: Reviewing (loading)    */}
+      {/* STEP 4: Reviewing + Fixing     */}
       {/* ============================== */}
       {v2Step === 'reviewing' && (
         <LoadingCard title="AI 검수 진행 중..." subtitle="팩트 비율, 의료법, 표기법을 자동 검수합니다" />
+      )}
+      {v2Step === 'fixing' && (
+        <LoadingCard title="AI 자동 수정 중..." subtitle="검수에서 발견된 문제를 자동으로 수정하고 있습니다" />
       )}
 
       {/* ============================== */}
@@ -761,8 +812,17 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       {/* ============================== */}
       {v2Step === 'results' && (
         <div className="space-y-4">
-          {/* Review Summary (v2) */}
-          <ReviewSummaryV2 v2Review={v2Review} selectedChannels={selectedChannels} />
+          {/* Fix Report or Pass Message */}
+          {Object.keys(v2FixReport).length > 0 ? (
+            <FixReport fixReport={v2FixReport} selectedChannels={selectedChannels} editedSections={editedSections} setEditedSections={setEditedSections} />
+          ) : (
+            Object.keys(v2Review).length > 0 && (
+              <div className="bg-success/5 rounded-xl p-4 border border-success/20">
+                <div className="text-[13px] font-bold text-success">✅ AI 검수 전체 통과</div>
+                <div className="text-[11px] text-success/70 mt-1">모든 채널에서 문제가 발견되지 않았습니다.</div>
+              </div>
+            )
+          )}
 
           {/* Quote Suggestions (if quote was empty) */}
           {(quoteSuggestions.length > 0 || quoteLoading) && !selectedQuote && (
@@ -786,16 +846,18 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             <div className="flex gap-1.5 overflow-x-auto">
               {selectedChannels.map((ch) => {
                 const cfg = CHANNEL_CONFIGS[ch];
-                const review = v2Review[ch];
-                const redCount = review?.issues?.filter((i) => i.severity === 'red').length || 0;
-                const yellowCount = review?.issues?.filter((i) => i.severity === 'yellow').length || 0;
                 const hasContent = !!v2Content[ch];
+                const fixed = !!v2FixReport[ch];
+                const needsInputCount = v2FixReport[ch]?.needsInput?.length || 0;
+                let indicator = '✅';
+                if (!hasContent) indicator = '⚠️';
+                else if (fixed && needsInputCount > 0) indicator = `⚠️${needsInputCount}`;
                 return (
                   <button key={ch} onClick={() => { setActiveResultTab(ch); setCopyStatus(''); }}
                     className={`px-4 py-2.5 rounded-lg text-[12px] font-semibold whitespace-nowrap border cursor-pointer transition-colors ${
                       activeResultTab === ch ? 'bg-dark text-white border-dark' : !hasContent ? 'bg-danger/5 text-danger border-danger/20' : 'bg-white text-slate border-pale hover:bg-snow'
                     }`}>
-                    {cfg.name} {!hasContent ? '⚠️' : redCount > 0 ? `🔴${redCount}` : yellowCount > 0 ? `🟡${yellowCount}` : '✅'}
+                    {cfg.name} {indicator}
                   </button>
                 );
               })}
@@ -808,7 +870,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               channelId={activeResultTab}
               sections={editedSections[activeResultTab]}
               updateSection={(idx, val) => updateSection(activeResultTab, idx, val)}
-              review={v2Review[activeResultTab]}
+              review={v2FixReport[activeResultTab] ? null : v2Review[activeResultTab]}
               isPR={activeResultTab === 'pressrelease'}
               prFixed={prFixed}
               updatePrFixed={updatePrFixed}
@@ -821,7 +883,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
           {/* Export actions */}
           <div className="space-y-3">
             {/* PR-specific export buttons */}
-            {isPRChannel && !v2HasRedIssues && (
+            {isPRChannel && (
               <div className="flex gap-2">
                 <button onClick={() => {
                   const sections = editedSections.pressrelease || [];
@@ -842,21 +904,15 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               </div>
             )}
 
-            {/* Register / Red issues warning */}
+            {/* Register */}
             <div className="flex gap-2">
               <button onClick={resetAll} className="px-5 py-3 rounded-lg text-[13px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">새 콘텐츠 만들기</button>
-              {v2HasRedIssues ? (
-                <div className="flex-1 py-3 rounded-lg text-[13px] font-bold text-center text-danger bg-danger/5 border border-danger/20">
-                  수정 후 내보내기 — 필수 수정 사항을 먼저 해결하세요
-                </div>
-              ) : (
-                <button onClick={handleV2Register} disabled={registered}
-                  className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
-                    registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
-                  }`}>
-                  {registered ? '파이프라인에 등록 완료 ✓' : '파이프라인에 등록'}
-                </button>
-              )}
+              <button onClick={handleV2Register} disabled={registered}
+                className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
+                  registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
+                }`}>
+                {registered ? '파이프라인에 등록 완료 ✓' : '파이프라인에 등록'}
+              </button>
             </div>
           </div>
         </div>
@@ -917,59 +973,95 @@ function FieldCard({ fieldDef, value, onChange }) {
   );
 }
 
-function ReviewSummaryV2({ v2Review, selectedChannels }) {
-  if (!v2Review || Object.keys(v2Review).length === 0) return null;
-
-  let totalCritical = 0;
-  let totalWarning = 0;
-  let totalChannels = 0;
-  let passedChannels = 0;
-  const factRatios = [];
+function FixReport({ fixReport, selectedChannels, editedSections, setEditedSections }) {
+  const allFixes = [];
+  const allNeedsInput = [];
 
   for (const ch of selectedChannels) {
-    const review = v2Review[ch];
-    if (!review) continue;
-    totalChannels++;
-    const critical = review.summary?.critical || review.issues?.filter((i) => i.severity === 'red').length || 0;
-    const warning = review.summary?.warning || review.issues?.filter((i) => i.severity === 'yellow').length || 0;
-    totalCritical += critical;
-    totalWarning += warning;
-    if (critical === 0 && warning === 0) passedChannels++;
-    if (review.summary?.factRatio) {
-      const ratio = review.summary.factRatio;
-      const pct = parseInt(ratio) || 0;
-      factRatios.push({
-        ch,
-        message: `팩트 비율: ${ratio}`,
-        severity: pct < 50 ? 'red' : 'yellow',
-      });
-    }
+    const result = fixReport[ch];
+    if (!result) continue;
+    if (result.fixes) allFixes.push(...result.fixes);
+    if (result.needsInput) allNeedsInput.push(...result.needsInput);
   }
 
-  if (totalChannels === 0) return null;
-  const allPass = totalCritical === 0 && totalWarning === 0;
+  const totalFixed = allFixes.length;
+  if (totalFixed === 0 && allNeedsInput.length === 0) {
+    return (
+      <div className="bg-success/5 rounded-xl p-4 border border-success/20">
+        <div className="text-[13px] font-bold text-success">✅ AI 검수 통과 — 수정 사항 없음</div>
+      </div>
+    );
+  }
+
+  const handleApplyInput = (placeholder, value) => {
+    if (!value.trim()) return;
+    setEditedSections((prev) => {
+      const copy = { ...prev };
+      for (const ch of Object.keys(copy)) {
+        if (!copy[ch]) continue;
+        copy[ch] = copy[ch].map((sec) => ({
+          ...sec,
+          text: sec.text.replace(placeholder, value.trim()),
+        }));
+      }
+      return copy;
+    });
+  };
 
   return (
-    <div className={`rounded-xl p-4 border ${
-      totalCritical > 0 ? 'bg-danger/5 border-danger/20' : totalWarning > 0 ? 'bg-warning/5 border-warning/20' : 'bg-success/5 border-success/20'
-    }`}>
-      <div className="text-[12px] font-bold mb-2">AI 검수 결과 (v2)</div>
-      <div className="flex items-center gap-4 text-[13px] flex-wrap">
-        {totalCritical > 0 && <span className="font-bold text-danger">🔴 {totalCritical}건 (반드시 수정)</span>}
-        {totalWarning > 0 && <span className="font-bold text-warning">🟡 {totalWarning}건 (확인 권장)</span>}
-        {allPass && <span className="font-bold text-success">✅ 전체 통과 ({passedChannels}채널)</span>}
+    <div className="bg-white rounded-xl p-4 border border-accent/20 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <div className="text-[13px] font-bold">수정 리포트</div>
+        <div className="text-[11px] text-success font-semibold">AI 자동 수정 {totalFixed}건 완료</div>
       </div>
-      {factRatios.length > 0 && (
-        <div className="mt-2 space-y-1">
-          {factRatios.map((fr, i) => (
-            <div key={i} className={`text-[12px] font-semibold ${fr.severity === 'red' ? 'text-danger' : 'text-warning'}`}>
-              📊 {CHANNEL_CONFIGS[fr.ch]?.name}: {fr.message}
-            </div>
-          ))}
+      {allFixes.map((fix, i) => (
+        <div key={`fix-${i}`} className="flex items-start gap-2 text-[12px] text-slate leading-relaxed">
+          <span className="text-success shrink-0 mt-0.5">✅</span>
+          <span><span className="font-semibold text-success">[자동 수정]</span> {fix.description}</span>
         </div>
-      )}
-      {totalCritical > 0 && (
-        <div className="text-[11px] text-danger mt-2">🔴 필수 수정 사항이 있습니다. 수정 후 내보내기가 가능합니다.</div>
+      ))}
+      {allNeedsInput.map((ni, i) => (
+        <NeedsInputItem key={`input-${i}`} item={ni} onApply={handleApplyInput} />
+      ))}
+    </div>
+  );
+}
+
+function NeedsInputItem({ item, onApply }) {
+  const [value, setValue] = useState('');
+  const [applied, setApplied] = useState(false);
+
+  const handleApply = () => {
+    if (!value.trim()) return;
+    onApply(item.placeholder, value);
+    setApplied(true);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-start gap-2 text-[12px] text-slate leading-relaxed">
+        <span className="text-warning shrink-0 mt-0.5">⚠️</span>
+        <span><span className="font-semibold text-warning">[입력 필요]</span> {item.description}</span>
+      </div>
+      {!applied ? (
+        <div className="flex gap-2 ml-6">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="직접 입력 (선택 사항 — 비워두면 플레이스홀더 유지)"
+            className="flex-1 px-3 py-2 rounded-lg border border-warning/30 text-[12px] outline-none focus:border-accent bg-snow"
+            onKeyDown={(e) => e.key === 'Enter' && handleApply()}
+          />
+          {value.trim() && (
+            <button onClick={handleApply}
+              className="px-3 py-2 rounded-lg text-[11px] font-semibold text-white bg-accent border-none cursor-pointer hover:bg-accent-dim shrink-0">
+              적용
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="ml-6 text-[11px] text-success font-semibold">입력 완료 ✓</div>
       )}
     </div>
   );
