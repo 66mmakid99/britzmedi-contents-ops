@@ -122,7 +122,11 @@ export function formatKBForPrompt(entries) {
   for (const [catLabel, items] of Object.entries(grouped)) {
     text += `### ${catLabel}\n`;
     for (const item of items) {
-      text += `[${item.title}]\n${item.content}\n\n`;
+      text += `[${item.title}]\n${item.content}\n`;
+      if (item.extractedData?.keywords?.length) {
+        text += `키워드: ${item.extractedData.keywords.join(', ')}\n`;
+      }
+      text += '\n';
     }
   }
 

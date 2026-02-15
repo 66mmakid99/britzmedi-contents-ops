@@ -1,4 +1,4 @@
-import { buildPrompt, buildFromPRPrompt, buildReviewPrompt, buildParsingPrompt, buildFactBasedPrompt, buildV2ReviewPrompt, buildAutoFixPrompt, buildQuoteSuggestionsPrompt } from '../constants/prompts';
+import { buildPrompt, buildFromPRPrompt, buildReviewPrompt, buildParsingPrompt, buildFactBasedPrompt, buildV2ReviewPrompt, buildAutoFixPrompt, buildQuoteSuggestionsPrompt, buildDocumentSummaryPrompt } from '../constants/prompts';
 import { formatKBForPrompt } from '../constants/knowledgeBase';
 
 const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
@@ -158,6 +158,19 @@ export async function autoFixContent({ content, issues, confirmedFields, channel
  * Generate 3 CEO quote suggestions based on context.
  * Returns [{ label, tone, text }, ...]
  */
+/**
+ * Summarize an uploaded document for KB storage.
+ * Returns { title, category, summary, extractedData }
+ */
+export async function summarizeDocumentForKB({ rawText, fileName, apiKey }) {
+  if (!apiKey) throw new Error('API 키가 필요합니다');
+  const prompt = buildDocumentSummaryPrompt(rawText, fileName);
+  const raw = await callClaude(prompt, apiKey, 2000);
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('문서 요약 결과를 해석할 수 없습니다');
+  return JSON.parse(jsonMatch[0]);
+}
+
 export async function generateQuoteSuggestions({ category, confirmedFields, generatedContent, timing, apiKey }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   const prompt = buildQuoteSuggestionsPrompt({ category, confirmedFields, generatedContent, timing });

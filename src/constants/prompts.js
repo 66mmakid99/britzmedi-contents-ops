@@ -915,6 +915,53 @@ ${content}
 /**
  * Generate 3 quote suggestions for the CEO when quote field is empty.
  */
+// =====================================================
+// Document Summary Prompt — KB file upload
+// =====================================================
+
+/**
+ * Build prompt for AI to summarize an uploaded document for KB storage.
+ * rawText is truncated to 80,000 chars to stay within token limits.
+ */
+export function buildDocumentSummaryPrompt(rawText, fileName) {
+  const truncated = rawText.length > 80000 ? rawText.slice(0, 80000) + '\n\n[...이하 생략 (80,000자 초과)]' : rawText;
+
+  return `당신은 문서 요약 전문가입니다.
+아래 문서의 내용을 분석하여 지식 베이스 항목으로 저장할 수 있도록 구조화된 요약을 생성하세요.
+
+## 파일명
+${fileName}
+
+## 문서 원문
+${truncated}
+
+## 출력 규칙
+1. title: 문서의 핵심 주제를 나타내는 제목 (30자 이내)
+2. category: 아래 중 가장 적합한 것 1개 선택
+   - company (회사 정보)
+   - product (제품 정보)
+   - technology (기술 정보)
+   - certification (인증/임상)
+   - market (시장 정보)
+   - guidelines (톤앤매너/규칙)
+3. summary: 핵심 내용 요약 (500~1500자). 다른 AI가 참고 자료로 활용할 수 있도록 팩트 중심으로 작성.
+4. extractedData: 문서에서 추출된 구조화 데이터 (선택). 키워드, 수치, 날짜 등.
+
+## 출력 형식
+반드시 아래 JSON 형식만 출력하세요. 다른 텍스트 없이 JSON만:
+
+{
+  "title": "문서 제목",
+  "category": "카테고리ID",
+  "summary": "요약 내용 (500~1500자)",
+  "extractedData": {
+    "keywords": ["키워드1", "키워드2"],
+    "keyFacts": ["핵심 사실1", "핵심 사실2"],
+    "numbers": ["수치 데이터1", "수치 데이터2"]
+  }
+}`;
+}
+
 export function buildQuoteSuggestionsPrompt({ category, confirmedFields, generatedContent, timing }) {
   const catDef = PR_CATEGORIES[category];
 

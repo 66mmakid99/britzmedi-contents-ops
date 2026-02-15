@@ -102,7 +102,7 @@ export default function App() {
           />
         )}
         {activePage === 'knowledge' && (
-          <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} />
+          <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} apiKey={apiKey} setApiKey={setApiKey} showToast={showToast} />
         )}
       </main>
 
