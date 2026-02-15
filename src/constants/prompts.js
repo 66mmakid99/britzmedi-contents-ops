@@ -121,6 +121,34 @@ export const PR_WRITING_GUIDELINES = `## 보도자료 작성 가이드라인 (�
 - 적정 분량: A4 1~1.5매 (1,000~2,000자)
 - 짧은 보도자료 > 날조가 포함된 긴 보도자료`;
 
+// Condensed critical rules for generation prompt (top + bottom placement for recency bias)
+const PR_CRITICAL_RULES = `🚨 보도자료 절대 규칙 3가지 🚨
+1. 보도문체: "~했다/밝혔다/전했다" 종결만 허용. "~합니다/입니다" 절대 금지. "우리/저희" 금지. 3인칭만.
+2. 영문 표기: 첫 등장만 "국문(영문)" 1회 병기, 이후 국문만. 예: 미국 식품의약국(FDA) → 이후 "미국 식품의약국"
+3. 팩트 전용: 소스+지식베이스만 사용. 없으면 [입력 필요]. 짧은 보도자료 > 날조 포함 긴 보도자료`;
+
+// DO/DON'T format for generation (replaces verbose PR_WRITING_GUIDELINES in generation prompt)
+const PR_DO_DONT = `## 보도자료 DO / DON'T
+
+DO:
+- "~했다", "~밝혔다", "~전했다", "~할 예정이다" 종결
+- 첫 문장: "브릿츠메디(대표 이신재)는", 이후: "브릿츠메디는"
+- 인용문: 작은따옴표 ' ' 사용 (보도 관행)
+- 영문: "국문(영문)", 첫 등장 1회만, 이후 국문만
+- 능동태: "체결했다" (O), "체결되었다" (X)
+- 한 문장 40~60자, 한 문단 2~4문장
+- 의료법 대체어: 극대화→개선, 최소화→감소, 완벽한→우수한, 획기적인→차별화된
+
+DON'T:
+- "~합니다/입니다/했습니다" (경어체)
+- "우리/저희" (3인칭 위반)
+- "~로 평가된다/알려져 있다/주목받고 있다" (출처 불명 → 삭제)
+- "~로 기대된다" 2회 이상 (본문 내 최대 1회)
+- 극대화, 최소화, 완벽한, 획기적인, 혁명적인, 완치, 확실한 효과, 부작용 없음
+- "~를 치료합니다" (효능 단정)
+- 소스에 없는 수치, 인용문, 현장 반응, 시장 분석, 전략/비전
+- "RF 마이크로니들링" → "TOROIDAL 고주파 기반 EBD"`;
+
 // =====================================================
 // Channel Format Rules
 // =====================================================
@@ -153,9 +181,9 @@ export const CHANNEL_CONFIGS = {
   },
   naver: {
     name: '📗 네이버 블로그',
-    charTarget: '2,000~3,000자',
+    charTarget: '1,500~2,500자',
     formatPrompt: `## 네이버 블로그 포맷 규칙
-- 분량: 2000~3000자
+- 분량: 1,500~2,500자 (소스 분량에 비례 — 소스가 짧으면 짧게)
 - 구조: 아래 섹션 라벨을 반드시 사용하여 구분
   [제목] SEO 키워드 앞배치, 40자 이내
   [도입부] 공감형 도입부
@@ -170,6 +198,12 @@ export const CHANNEL_CONFIGS = {
 - SEO 키워드 자연 배치
 - 짧은 문단 (3~4줄)
 - 전문용어에 쉬운 설명 병기
+
+🚨 팩트 규칙 (필수):
+- 소스에 없는 시장 분석, 업계 전망, 전략/비전, 향후 로드맵을 만들지 마
+- 지식베이스의 제품/기술 정보는 배경 설명으로 활용 가능
+- 소스 5줄에서 20문단 나올 수 없음. 소스가 부족하면 분량을 줄여라
+- 짧은 블로그 글 > 날조 포함 긴 블로그 글
 
 ⚠️ 출력 형식 규칙 (필수):
 - 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지
@@ -777,9 +811,11 @@ export function buildFactBasedPrompt({ category, confirmedFields, timing, channe
     .join('\n');
 
   const kbSection = kbText ? '\n' + kbText + '\n' : '';
-  const guidelinesSection = channelId === 'pressrelease' ? '\n' + PR_WRITING_GUIDELINES + '\n' : '';
+  const criticalRules = channelId === 'pressrelease' ? PR_CRITICAL_RULES + '\n\n' : '';
+  const guidelinesSection = channelId === 'pressrelease' ? '\n' + PR_DO_DONT + '\n' : '';
+  const bottomReminder = channelId === 'pressrelease' ? '\n\n' + PR_CRITICAL_RULES : '';
 
-  return `${BRITZMEDI_CONTEXT}
+  return `${criticalRules}${BRITZMEDI_CONTEXT}
 
 ${channelConfig.formatPrompt}
 ${guidelinesSection}${kbSection}
@@ -826,8 +862,11 @@ ${timing === 'pre'
    - 인증이 언급되면 → FDA 등 기존 인증 실적 언급
 4. 인용문: 확인된 팩트에 없으면 [대표 인용문 - 직접 작성 또는 확인 필요] 플레이스홀더
 5. 알 수 없는 정보: [추가 정보 필요: 구체적 설명] 플레이스홀더
-6. 분량: 보도자료는 A4 1~1.5매 수준 (본문 1,000~2,000자). 다른 채널은 채널 포맷 규칙 따름. 팩트가 부족하면 억지로 늘리지 말고 짧게 끝낼 것.
-7. 영문 표기: 첫 등장 시 "국문(영문)" 형태, 이후 국문으로만 통일.
+6. 분량 (엄격): 목표 ${channelConfig.charTarget}. 단, 소스 분량에 비례.
+   - 소스 5줄 → 본문 5~10문장이 적정. 20문단은 과다(날조 의심).
+   - 소스에 없는 시장 분석, 업계 전망, 전략/비전을 주 내용으로 넣지 마.
+   - 소스가 부족하면 목표 분량 미달이어도 OK. 짧은 글 > 날조 포함 긴 글.
+7. 영문 표기: 첫 등장 시 "국문(영문)" 형태, 이후 국문만.
 
 [회사 소개] 보일러플레이트:
 ${PR_BOILERPLATE.companyIntro}
@@ -835,7 +874,7 @@ ${PR_BOILERPLATE.companyIntro}
 위의 회사 정보, 톤앤매너 가이드, 금지어 목록, 채널별 포맷 규칙을 모두 반영하여 작성하세요.
 금지하는 건 "날조"이지 "배경 설명"이 아닙니다. 지식베이스에 있는 정보는 적극 활용하세요.
 
-⚠️ 중요: 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지. 일반 텍스트로만 작성하고, 섹션 구분은 대괄호 라벨만 사용할 것.`;
+⚠️ 중요: 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지. 일반 텍스트로만 작성하고, 섹션 구분은 대괄호 라벨만 사용할 것.${bottomReminder}`;
 }
 
 /**

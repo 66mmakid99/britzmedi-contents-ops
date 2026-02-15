@@ -580,6 +580,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   // ===========================================
   const v2StepIdx = V2_STEP_INDEX[v2Step] ?? 0;
   const isPRChannel = selectedChannels.includes('pressrelease');
+  const hasNonPRSelected = selectedChannels.some((ch) => ch !== 'pressrelease');
 
   return (
     <div className="space-y-5">
@@ -639,17 +640,24 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
           {/* Channel selection */}
           <div className="bg-white rounded-xl p-5 border border-pale space-y-3">
             <div>
-              <div className="text-[13px] font-bold mb-1">발행 채널 (복수 가능)</div>
-              <div className="text-[11px] text-mist">팩트 기반으로 각 채널 포맷에 맞게 생성됩니다</div>
+              <div className="text-[13px] font-bold mb-1">발행 채널</div>
+              <div className="text-[11px] text-mist">
+                {isPRChannel
+                  ? '보도자료는 단독 생성됩니다'
+                  : '팩트 기반으로 각 채널 포맷에 맞게 생성됩니다 (복수 선택 가능)'}
+              </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {FACTORY_CHANNELS.map((ch) => {
                 const cfg = CHANNEL_CONFIGS[ch];
                 const selected = selectedChannels.includes(ch);
+                const disabled = (ch === 'pressrelease' && hasNonPRSelected) || (ch !== 'pressrelease' && isPRChannel);
                 return (
-                  <button key={ch} onClick={() => toggleChannel(ch)}
-                    className={`p-3 rounded-lg text-left border cursor-pointer transition-all ${
-                      selected ? 'bg-accent/10 border-accent' : 'bg-white border-pale hover:border-silver'
+                  <button key={ch} onClick={() => toggleChannel(ch)} disabled={disabled}
+                    className={`p-3 rounded-lg text-left border transition-all ${
+                      disabled ? 'opacity-40 cursor-not-allowed bg-pale border-pale'
+                      : selected ? 'bg-accent/10 border-accent cursor-pointer'
+                      : 'bg-white border-pale hover:border-silver cursor-pointer'
                     }`}>
                     <div className="flex items-center gap-1.5">
                       <div className={`w-4 h-4 rounded border-2 flex items-center justify-center text-[9px] ${
@@ -661,6 +669,11 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
                 );
               })}
             </div>
+            {isPRChannel && (
+              <div className="text-[11px] text-accent bg-accent/5 rounded-lg px-3 py-2 border border-accent/10">
+                보도자료 발행 완료 후 "채널 콘텐츠 만들기"에서 네이버/카카오톡 등으로 재가공할 수 있습니다.
+              </div>
+            )}
           </div>
 
           {/* Timing selection */}
