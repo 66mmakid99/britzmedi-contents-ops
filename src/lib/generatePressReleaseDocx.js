@@ -263,14 +263,6 @@ export async function generatePressReleaseDocx(data) {
           ['미디어 문의', '이성호 CMO\nsh.lee@britzmedi.co.kr\n010-6525-9442'],
         ]),
 
-        // ■ 태그
-        new Paragraph({
-          spacing: { before: 200 },
-          children: [
-            new TextRun({ text: '[태그] ', bold: true, font: 'Malgun Gothic', size: 20, color: '666666' }),
-            new TextRun({ text: data.tags || '', font: 'Malgun Gothic', size: 20, color: '666666' }),
-          ],
-        }),
       ],
     }],
   });

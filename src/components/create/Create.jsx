@@ -70,7 +70,6 @@ async function handleWordDownload(sections, prFixed, selectedQuote) {
     companyIntro: getSection('회사 소개') || getSection('회사 개요'),
     photoGuide: getListSection('사진 가이드'),
     attachGuide: getListSection('첨부파일 가이드'),
-    tags: getSection('태그'),
     date: prFixed.날짜 || new Date().toISOString().split('T')[0],
     website: prFixed.웹사이트 || 'www.britzmedi.co.kr / www.britzmedi.com',
   };
