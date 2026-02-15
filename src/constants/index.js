@@ -43,6 +43,22 @@ export const CONTENT_PILLARS = {
   ],
 };
 
+// Spokesperson roles for quote attribution
+export const SPOKESPERSONS = {
+  ceo: { role: 'CEO', title: '대표이사', name: '이신재', bestFor: ['partnership', 'award', 'general'] },
+  cto: { role: 'CTO', title: '최고기술책임자', name: '', bestFor: ['product_launch', 'certification'] },
+  cmo: { role: 'CMO', title: '마케팅총괄', name: '이성호', bestFor: ['exhibition'] },
+  cfo: { role: 'CFO', title: '최고재무책임자', name: '', bestFor: [] },
+};
+
+/** Get recommended spokesperson key based on category */
+export function getRecommendedSpokesperson(category) {
+  for (const [key, sp] of Object.entries(SPOKESPERSONS)) {
+    if (sp.bestFor.includes(category)) return key;
+  }
+  return 'ceo'; // fallback
+}
+
 // Demo data for initial display
 export const DEMO_CONTENTS = [
   { id: 1, title: 'TOROIDAL 고주파 vs 기존 고주파 기술: 임상 비교', track: 'A', pillar: 'A1', stage: 'published', channels: { blog: true, linkedin: true, instagram: true }, date: '2026-02-03' },

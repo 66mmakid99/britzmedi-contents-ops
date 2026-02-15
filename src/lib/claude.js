@@ -171,9 +171,9 @@ export async function summarizeDocumentForKB({ rawText, fileName, apiKey }) {
   return JSON.parse(jsonMatch[0]);
 }
 
-export async function generateQuoteSuggestions({ category, confirmedFields, generatedContent, timing, apiKey }) {
+export async function generateQuoteSuggestions({ category, confirmedFields, generatedContent, timing, apiKey, speakerName, speakerTitle }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
-  const prompt = buildQuoteSuggestionsPrompt({ category, confirmedFields, generatedContent, timing });
+  const prompt = buildQuoteSuggestionsPrompt({ category, confirmedFields, generatedContent, timing, speakerName, speakerTitle });
   const raw = await callClaude(prompt, apiKey, 1500);
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error('인용문 생성 결과를 해석할 수 없습니다');

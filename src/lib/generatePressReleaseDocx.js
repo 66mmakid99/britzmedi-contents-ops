@@ -128,6 +128,7 @@ export async function generatePressReleaseDocx(data) {
   // Filter out placeholder text
   const cleanBody = (data.body || '')
     .replace(/\[대표 인용문 - 직접 작성 또는 확인 필요\]/g, '')
+    .replace(/\[QUOTE_PLACEHOLDER\]/g, '')
     .replace(/\[입력 필요:[^\]]*\]/g, '')
     .replace(/\[태그[:\s].*?\]/g, '')
     .replace(/\n태그[:\s].*$/gm, '')
@@ -141,13 +142,7 @@ export async function generatePressReleaseDocx(data) {
     })
   );
 
-  const quoteParagraphs = data.quote ? [
-    new Paragraph({
-      spacing: { before: 200, after: 200, line: 384 },
-      indent: { left: 720 },
-      children: [new TextRun({ text: data.quote, italics: true, font: 'Malgun Gothic', size: 22 })],
-    }),
-  ] : [];
+  // Quotes are now integrated into body paragraph 4, no separate section needed
 
   const photoSection = data.photoGuide?.length > 0
     ? [new Paragraph({ spacing: { before: 300 }, children: [] }), numberedTable('사진 가이드', data.photoGuide)]
@@ -225,11 +220,8 @@ export async function generatePressReleaseDocx(data) {
           children: [new TextRun({ text: data.subtitle || '', font: 'Malgun Gothic', size: 24, color: '666666' })],
         }),
 
-        // ■ 본문
+        // ■ 본문 (인용문은 본문 4번째 문단에 통합됨)
         ...bodyParagraphs,
-
-        // ■ 인용문
-        ...quoteParagraphs,
 
         // ■ 사진 가이드
         ...photoSection,

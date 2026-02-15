@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CHANNEL_CONFIGS, FACTORY_CHANNELS, PR_DERIVED_CHANNELS, PR_CATEGORIES } from '../../constants/prompts';
+import { SPOKESPERSONS, getRecommendedSpokesperson } from '../../constants/index';
 import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2, autoFixContent, generateQuoteSuggestions } from '../../lib/claude';
 import { parseSections, assembleSections, assembleTextOnly } from '../../lib/sectionUtils';
 import { generatePressReleaseDocx } from '../../lib/generatePressReleaseDocx';
@@ -41,7 +42,7 @@ function assemblePR(sections, fixed) {
 function filterPlaceholders(text) {
   return text.split('\n\n')
     .filter((block) => !block.includes('[대표 인용문 - 직접 작성 또는 확인 필요]'))
-    .map((block) => block.replace(/\[입력 필요:[^\]]*\]/g, '').trim())
+    .map((block) => block.replace(/\[입력 필요:[^\]]*\]/g, '').replace(/\[QUOTE_PLACEHOLDER\]/g, '').trim())
     .filter(Boolean)
     .join('\n\n');
 }
@@ -66,7 +67,7 @@ async function handleWordDownload(sections, prFixed, selectedQuote) {
     title: getSection('제목'),
     subtitle: getSection('부제목'),
     body: getBodySections() || getSection('전체'),
-    quote: selectedQuote || null,
+    quote: null, // quotes are now integrated into body paragraph 4
     companyIntro: getSection('회사 소개') || getSection('회사 개요'),
     photoGuide: getListSection('사진 가이드'),
     attachGuide: getListSection('첨부파일 가이드'),
@@ -131,6 +132,17 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState(null);
 
+  // --- Spokesperson state ---
+  const [spokespersonKey, setSpokespersonKey] = useState('ceo');
+  const [spokespersonName, setSpokespersonName] = useState(SPOKESPERSONS.ceo.name);
+
+  // Auto-recommend spokesperson when category changes
+  useEffect(() => {
+    const recKey = getRecommendedSpokesperson(selectedCategory);
+    setSpokespersonKey(recKey);
+    setSpokespersonName(SPOKESPERSONS[recKey].name);
+  }, [selectedCategory]);
+
   const isFromPR = !!prSourceData;
 
   // Derived: red issues for from-PR mode
@@ -190,6 +202,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       setQuoteSuggestions([]);
       setQuoteLoading(false);
       setSelectedQuote(null);
+      setSpokespersonKey('ceo');
+      setSpokespersonName(SPOKESPERSONS.ceo.name);
     }
   };
 
@@ -350,6 +364,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         return reviews;
       })();
 
+      const sp = SPOKESPERSONS[spokespersonKey];
       const quotePromise = quoteIsEmpty ? (async () => {
         try {
           setQuoteLoading(true);
@@ -359,6 +374,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             generatedContent: firstContent,
             timing,
             apiKey,
+            speakerName: spokespersonName || sp?.name,
+            speakerTitle: sp?.title || '대표',
           });
           setQuoteSuggestions(Array.isArray(suggestions) ? suggestions : []);
         } catch {
@@ -430,7 +447,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   /** Insert selected quote into content, replacing placeholder */
   const handleSelectQuote = (quoteText) => {
     setSelectedQuote(quoteText);
-    const placeholder = '[대표 인용문 - 직접 작성 또는 확인 필요]';
+    const placeholder = '[QUOTE_PLACEHOLDER]';
     setEditedSections((prev) => {
       const copy = { ...prev };
       for (const ch of selectedChannels) {
@@ -451,6 +468,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setQuoteLoading(true);
     setQuoteSuggestions([]);
     setSelectedQuote(null);
+    const sp = SPOKESPERSONS[spokespersonKey];
     try {
       const suggestions = await generateQuoteSuggestions({
         category: selectedCategory,
@@ -458,6 +476,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         generatedContent: firstContent,
         timing,
         apiKey,
+        speakerName: spokespersonName || sp?.name,
+        speakerTitle: sp?.title || '대표',
       });
       setQuoteSuggestions(Array.isArray(suggestions) ? suggestions : []);
     } catch {
@@ -775,6 +795,50 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               ))}
             </div>
 
+            {/* Spokesperson selector */}
+            <div className="bg-accent/5 rounded-xl p-4 border border-accent/10 space-y-3">
+              <div>
+                <div className="text-[13px] font-bold">대변인 선택</div>
+                <div className="text-[11px] text-mist">인용문에 사용할 대변인을 선택하세요. 카테고리에 따라 자동 추천됩니다.</div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {Object.entries(SPOKESPERSONS).map(([key, sp]) => {
+                  const isRecommended = sp.bestFor.includes(selectedCategory);
+                  const isSelected = spokespersonKey === key;
+                  return (
+                    <button key={key} onClick={() => { setSpokespersonKey(key); setSpokespersonName(sp.name); }}
+                      className={`p-2.5 rounded-lg border cursor-pointer transition-all text-left ${
+                        isSelected
+                          ? 'bg-dark text-white border-dark'
+                          : 'bg-white border-pale hover:bg-snow'
+                      }`}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[12px] font-bold">{sp.role}</span>
+                        {isRecommended && !isSelected && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-semibold">추천</span>
+                        )}
+                      </div>
+                      <div className={`text-[10px] mt-0.5 ${isSelected ? 'text-silver' : 'text-mist'}`}>{sp.title}</div>
+                      <div className={`text-[11px] mt-1 ${isSelected ? 'text-white' : 'text-slate'}`}>
+                        {sp.name || '(미지정)'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Editable name field */}
+              <div className="flex items-center gap-3">
+                <label className="text-[11px] text-steel whitespace-nowrap">{SPOKESPERSONS[spokespersonKey]?.role} 이름:</label>
+                <input
+                  type="text"
+                  value={spokespersonName}
+                  onChange={(e) => setSpokespersonName(e.target.value)}
+                  placeholder="이름을 입력하세요"
+                  className="flex-1 px-3 py-1.5 rounded-lg border border-pale text-[12px] outline-none focus:border-accent bg-white"
+                />
+              </div>
+            </div>
+
             {/* Summary: how many facts confirmed */}
             <div className="bg-snow rounded-lg p-3">
               <div className="text-[12px] text-steel">
@@ -783,7 +847,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
                 </span> / {PR_CATEGORIES[selectedCategory]?.fields.length || 0}개 필드
               </div>
               <div className="text-[11px] text-mist mt-1">
-                채널: {selectedChannels.map((ch) => CHANNEL_CONFIGS[ch]?.name).join(', ')} | 시점: {timing === 'pre' ? '예고형' : '리뷰형'}
+                채널: {selectedChannels.map((ch) => CHANNEL_CONFIGS[ch]?.name).join(', ')} | 시점: {timing === 'pre' ? '예고형' : '리뷰형'} | 대변인: {spokespersonName || '미지정'} ({SPOKESPERSONS[spokespersonKey]?.role})
               </div>
             </div>
           </div>
