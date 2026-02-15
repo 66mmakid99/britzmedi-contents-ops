@@ -1,66 +1,124 @@
-import { useState } from "react";
-import INITIAL_CONTENTS from "./data/initialContents";
-import { getDaysUntil } from "./lib/utils";
-import { D_DAY_DATE } from "./data/constants";
-import Dashboard from "./components/Dashboard";
-import Calendar from "./components/Calendar";
-import Pipeline from "./components/Pipeline";
-import Publishing from "./components/Publishing";
-import ContentFactory from "./components/ContentFactory";
-
-const tabs = [
-  { id: "dashboard", label: "📊 대시보드" },
-  { id: "calendar", label: "📅 캘린더" },
-  { id: "pipeline", label: "🔄 파이프라인" },
-  { id: "publishing", label: "📢 발행관리" },
-  { id: "factory", label: "✨ 콘텐츠 팩토리" },
-];
+import { useState, useCallback } from 'react';
+import Header from './components/layout/Header';
+import BottomNav from './components/layout/BottomNav';
+import Toast from './components/layout/Toast';
+import ContentModal from './components/layout/ContentModal';
+import Dashboard from './components/dashboard/Dashboard';
+import Calendar from './components/calendar/Calendar';
+import Pipeline from './components/pipeline/Pipeline';
+import Publish from './components/publish/Publish';
+import Create from './components/create/Create';
+import KnowledgeBase from './components/knowledge/KnowledgeBase';
+import RepurposeHub from './components/repurpose/RepurposeHub';
+import useLocalStorage from './hooks/useLocalStorage';
+import { DEMO_CONTENTS } from './constants';
+import { DEFAULT_KB_ENTRIES } from './constants/knowledgeBase';
 
 export default function App() {
-  const [contents, setContents] = useState(INITIAL_CONTENTS);
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activePage, setActivePage] = useState('dashboard');
+  const [contents, setContents] = useLocalStorage('bm-contents', DEMO_CONTENTS);
+  const [toast, setToast] = useState(null);
+  const [modalContent, setModalContent] = useState(null);
+  const [apiKey, setApiKey] = useLocalStorage('bm-apikey', '');
+
+  // Knowledge Base
+  const [kbEntries, setKbEntries] = useLocalStorage('bm-knowledge-base', DEFAULT_KB_ENTRIES);
+
+  // PR → Channel content creation source
+  const [prSourceData, setPrSourceData] = useState(null);
+
+  // Repurpose: selected press release for channel repurposing
+  const [repurposePR, setRepurposePR] = useState(null);
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setToast({ msg, type });
+  }, []);
+
+  const handleAddContent = (newContent) => {
+    setContents((prev) => [newContent, ...prev]);
+    if (!prSourceData) {
+      setActivePage('pipeline');
+    }
+    showToast('콘텐츠가 추가되었습니다');
+  };
+
+  const handleSaveContent = (updated) => {
+    setContents(contents.map((c) => (c.id === updated.id ? updated : c)));
+    showToast('저장되었습니다');
+  };
+
+  const handleDeleteContent = (id) => {
+    setContents(contents.filter((c) => c.id !== id));
+    showToast('삭제되었습니다', 'info');
+  };
+
+  const handleCreateFromPR = (prItem) => {
+    setPrSourceData({
+      id: prItem.id,
+      title: prItem.title,
+      date: prItem.date,
+      draft: typeof prItem.draft === 'string' ? prItem.draft : JSON.stringify(prItem.draft),
+    });
+    setActivePage('create');
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">BRITZMEDI Content Ops</h1>
-              <p className="text-xs text-gray-500">2트랙 콘텐츠 운영 시스템</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-400">콘텐츠 {contents.length}건</p>
-              <p className="text-xs font-bold text-indigo-600">
-                D-{Math.max(0, getDaysUntil(D_DAY_DATE))}
-              </p>
-            </div>
-          </div>
-          <nav className="flex gap-1 mt-3 -mb-px overflow-x-auto">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap transition ${
-                  activeTab === tab.id
-                    ? "bg-gray-50 text-gray-900 border border-gray-200 border-b-gray-50 -mb-px"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </header>
+    <div className="min-h-screen bg-snow font-sans pb-[72px] md:pb-0">
+      <Header activePage={activePage} setActivePage={setActivePage} />
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {activeTab === "dashboard" && <Dashboard contents={contents} setActiveTab={setActiveTab} />}
-        {activeTab === "calendar" && <Calendar contents={contents} />}
-        {activeTab === "pipeline" && <Pipeline contents={contents} setContents={setContents} />}
-        {activeTab === "publishing" && <Publishing contents={contents} setContents={setContents} />}
-        {activeTab === "factory" && <ContentFactory contents={contents} setContents={setContents} />}
+      <Toast toast={toast} onClose={() => setToast(null)} />
+
+      {modalContent && (
+        <ContentModal
+          content={modalContent}
+          onClose={() => setModalContent(null)}
+          onSave={handleSaveContent}
+          onDelete={handleDeleteContent}
+        />
+      )}
+
+      <main className="max-w-[1200px] mx-auto p-3 md:p-6">
+        {activePage === 'dashboard' && (
+          <Dashboard contents={contents} onOpenContent={setModalContent} setActivePage={setActivePage} />
+        )}
+        {activePage === 'calendar' && (
+          <Calendar contents={contents} onOpenContent={setModalContent} />
+        )}
+        {activePage === 'pipeline' && (
+          <Pipeline
+            contents={contents}
+            setContents={setContents}
+            onOpenContent={setModalContent}
+            onCreateFromPR={handleCreateFromPR}
+          />
+        )}
+        {activePage === 'publish' && (
+          <Publish contents={contents} setContents={setContents} onOpenContent={setModalContent} />
+        )}
+        {activePage === 'create' && (
+          <Create
+            onAdd={handleAddContent}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            prSourceData={prSourceData}
+            onClearPRSource={() => { setPrSourceData(null); setActivePage('pipeline'); }}
+            knowledgeBase={kbEntries}
+          />
+        )}
+        {activePage === 'repurpose' && (
+          <RepurposeHub
+            pressRelease={repurposePR}
+            apiKey={apiKey}
+            contents={contents}
+            onSelectPR={(item) => setRepurposePR(item)}
+          />
+        )}
+        {activePage === 'knowledge' && (
+          <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} apiKey={apiKey} setApiKey={setApiKey} showToast={showToast} />
+        )}
       </main>
+
+      <BottomNav activePage={activePage} setActivePage={setActivePage} />
     </div>
   );
 }
