@@ -9,6 +9,7 @@ import Pipeline from './components/pipeline/Pipeline';
 import Publish from './components/publish/Publish';
 import Create from './components/create/Create';
 import KnowledgeBase from './components/knowledge/KnowledgeBase';
+import RepurposeHub from './components/repurpose/RepurposeHub';
 import useLocalStorage from './hooks/useLocalStorage';
 import { DEMO_CONTENTS } from './constants';
 import { DEFAULT_KB_ENTRIES } from './constants/knowledgeBase';
@@ -25,6 +26,9 @@ export default function App() {
 
   // PR → Channel content creation source
   const [prSourceData, setPrSourceData] = useState(null);
+
+  // Repurpose: selected press release for channel repurposing
+  const [repurposePR, setRepurposePR] = useState(null);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
@@ -99,6 +103,14 @@ export default function App() {
             prSourceData={prSourceData}
             onClearPRSource={() => { setPrSourceData(null); setActivePage('pipeline'); }}
             knowledgeBase={kbEntries}
+          />
+        )}
+        {activePage === 'repurpose' && (
+          <RepurposeHub
+            pressRelease={repurposePR}
+            apiKey={apiKey}
+            contents={contents}
+            onSelectPR={(item) => setRepurposePR(item)}
           />
         )}
         {activePage === 'knowledge' && (

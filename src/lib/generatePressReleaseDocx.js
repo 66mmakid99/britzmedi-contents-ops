@@ -129,6 +129,9 @@ export async function generatePressReleaseDocx(data) {
   const cleanBody = (data.body || '')
     .replace(/\[대표 인용문 - 직접 작성 또는 확인 필요\]/g, '')
     .replace(/\[입력 필요:[^\]]*\]/g, '')
+    .replace(/\[태그[:\s].*?\]/g, '')
+    .replace(/\n태그[:\s].*$/gm, '')
+    .replace(/\n#\S+(\s+#\S+)*/g, '')
     .trim();
 
   const bodyParagraphs = cleanBody.split('\n\n').filter(Boolean).map((para) =>
