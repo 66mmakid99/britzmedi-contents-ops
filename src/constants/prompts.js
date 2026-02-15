@@ -272,6 +272,114 @@ export const FACTORY_CHANNELS = ['newsletter', 'naver', 'kakao', 'pressrelease']
 export const PR_DERIVED_CHANNELS = ['newsletter', 'naver', 'kakao', 'linkedin', 'instagram'];
 
 // =====================================================
+// PR Categories & Boilerplate for Factory v2
+// =====================================================
+
+export const PR_CATEGORIES = {
+  exhibition: {
+    label: '전시회/학회 참가',
+    icon: '🏢',
+    fields: [
+      { key: 'eventName', label: '전시회/학회명', required: true },
+      { key: 'eventDate', label: '행사 일시', required: true },
+      { key: 'eventLocation', label: '장소', required: true },
+      { key: 'boothInfo', label: '부스 정보 (번호, 위치)' },
+      { key: 'exhibitProducts', label: '전시 제품/기술' },
+      { key: 'livePrograms', label: '라이브 세션/데모' },
+      { key: 'participants', label: '참가 규모/대상' },
+      { key: 'quote', label: '대표 인용문' },
+      { key: 'futurePlan', label: '향후 계획' },
+    ],
+  },
+  partnership: {
+    label: '파트너십/계약 체결',
+    icon: '🤝',
+    fields: [
+      { key: 'partnerName', label: '파트너사명', required: true },
+      { key: 'dealType', label: '계약 유형 (MOU, 독점, 유통 등)', required: true },
+      { key: 'dealScope', label: '계약 범위/지역' },
+      { key: 'dealValue', label: '계약 규모/금액' },
+      { key: 'dealDate', label: '체결 일자' },
+      { key: 'partnerProfile', label: '파트너사 소개' },
+      { key: 'expectedEffect', label: '기대 효과' },
+      { key: 'quote', label: '대표 인용문' },
+      { key: 'futurePlan', label: '향후 계획' },
+    ],
+  },
+  product_launch: {
+    label: '신제품/신기술 출시',
+    icon: '🚀',
+    fields: [
+      { key: 'productName', label: '제품/기술명', required: true },
+      { key: 'launchDate', label: '출시/발표 일자' },
+      { key: 'features', label: '핵심 특징/스펙', required: true },
+      { key: 'technology', label: '적용 기술' },
+      { key: 'targetMarket', label: '타겟 시장/고객' },
+      { key: 'certification', label: '인증 현황 (FDA 등)' },
+      { key: 'pricing', label: '가격/판매 정보' },
+      { key: 'quote', label: '대표 인용문' },
+      { key: 'futurePlan', label: '향후 계획' },
+    ],
+  },
+  certification: {
+    label: '인증/임상 성과',
+    icon: '📋',
+    fields: [
+      { key: 'certName', label: '인증/승인 명칭', required: true },
+      { key: 'certBody', label: '인증 기관', required: true },
+      { key: 'certDate', label: '인증 일자' },
+      { key: 'certScope', label: '인증 범위/대상 제품' },
+      { key: 'clinicalData', label: '임상 데이터/결과' },
+      { key: 'significance', label: '의미/업계 영향' },
+      { key: 'quote', label: '대표 인용문' },
+      { key: 'futurePlan', label: '향후 계획' },
+    ],
+  },
+  award: {
+    label: '수상/선정',
+    icon: '🏆',
+    fields: [
+      { key: 'awardName', label: '수상명/선정명', required: true },
+      { key: 'awardBody', label: '수여 기관', required: true },
+      { key: 'awardDate', label: '수상 일자' },
+      { key: 'awardReason', label: '수상 이유/선정 기준' },
+      { key: 'awardScope', label: '수상 규모 (참가 기업 수 등)' },
+      { key: 'quote', label: '대표 인용문' },
+      { key: 'futurePlan', label: '향후 계획' },
+    ],
+  },
+  general: {
+    label: '기타 (일반)',
+    icon: '📰',
+    fields: [
+      { key: 'headline', label: '핵심 뉴스', required: true },
+      { key: 'what', label: '무엇 (What)' },
+      { key: 'when', label: '언제 (When)' },
+      { key: 'where', label: '어디서 (Where)' },
+      { key: 'who', label: '누가 (Who)' },
+      { key: 'why', label: '왜/의미 (Why)' },
+      { key: 'how', label: '어떻게 (How)' },
+      { key: 'quote', label: '대표 인용문' },
+      { key: 'futurePlan', label: '향후 계획' },
+    ],
+  },
+};
+
+export const PR_BOILERPLATE = {
+  companyIntro: `BRITZMEDI Co., Ltd. (브릿츠메디)는 2017년 설립된 메디컬 에스테틱 디바이스 전문기업으로, FDA 승인을 받은 TOROIDAL 고주파 기술과 EBD(Energy Based Device) 분야의 독자적 융합 기술을 기반으로 글로벌 메디컬 에스테틱 디바이스 시장에 혁신적인 솔루션을 제공하고 있습니다.
+회사명: BRITZMEDI Co., Ltd. (브릿츠메디 주식회사)
+설립: 2017년 / 대표이사: 이신재
+본사: 경기도 성남시 둔촌대로 388, 크란츠테크노 1211호
+홈페이지: www.britzmedi.co.kr / www.britzmedi.com`,
+  contactTemplate: `출처: 브릿츠메디
+웹사이트: www.britzmedi.co.kr / www.britzmedi.com
+소셜 링크:
+Instagram: https://www.instagram.com/britzmedi_official
+LinkedIn: https://www.linkedin.com/company/britzmedi
+YouTube: https://www.youtube.com/@britzmedi`,
+};
+
+// =====================================================
 // Pillar Presets with Topics
 // =====================================================
 
@@ -515,4 +623,184 @@ ${content}
 ${hasSource ? '팩트 비율 항목을 반드시 배열의 첫 번째로 넣으세요.' : ''}
 문제가 없으면 빈 배열 [] 을 반환하세요.
 severity는 "red"(반드시 수정) 또는 "yellow"(확인 권장)만 사용하세요.`;
+}
+
+// =====================================================
+// Factory v2 Prompts — 3-pass: Parse → Generate → Review
+// =====================================================
+
+/**
+ * STEP 1: Parse source text into structured facts (JSON response).
+ */
+export function buildParsingPrompt(sourceText) {
+  const categoryList = Object.entries(PR_CATEGORIES)
+    .map(([id, cat]) => `- ${id}: ${cat.label}`)
+    .join('\n');
+
+  const fieldsByCategory = Object.entries(PR_CATEGORIES)
+    .map(([id, cat]) => {
+      const fields = cat.fields
+        .map((f) => `    "${f.key}": "${f.label}${f.required ? ' (필수)' : ''}"`)
+        .join(',\n');
+      return `  "${id}": {\n${fields}\n  }`;
+    })
+    .join(',\n');
+
+  return `당신은 보도자료 소스 텍스트에서 구조화된 팩트를 추출하는 파서입니다.
+
+## 카테고리 목록
+${categoryList}
+
+## 카테고리별 추출 필드
+{
+${fieldsByCategory}
+}
+
+## 규칙
+1. 소스 텍스트를 읽고 가장 적합한 카테고리를 판단하세요.
+2. 해당 카테고리의 각 필드에 대해 소스에서 관련 정보를 추출하세요.
+3. 소스에 해당 정보가 없으면 반드시 null을 넣으세요 (절대 지어내지 마세요).
+4. 추출한 값은 소스 원문의 표현을 최대한 유지하세요.
+5. 하나의 필드에 여러 항목이 있으면 쉼표나 줄바꿈으로 나열하세요.
+
+## 소스 텍스트
+${sourceText}
+
+## 출력 형식
+반드시 아래 JSON 형식만 출력하세요. 다른 텍스트 없이 JSON만:
+
+{
+  "category": "카테고리ID",
+  "fields": {
+    "필드key": "추출된 값 또는 null",
+    ...
+  }
+}`;
+}
+
+/**
+ * STEP 3: Generate content from confirmed facts only.
+ */
+export function buildFactBasedPrompt({ category, confirmedFields, timing, channelId }) {
+  const channelConfig = CHANNEL_CONFIGS[channelId];
+  if (!channelConfig) return '';
+
+  const catDef = PR_CATEGORIES[category];
+  const timingLabel = timing === 'pre' ? '예고형 (미래 시제)' : '리뷰형 (과거 시제)';
+
+  const factsSection = Object.entries(confirmedFields || {})
+    .filter(([, val]) => val !== null && val !== '' && val !== undefined)
+    .map(([key, val]) => {
+      const fieldDef = catDef?.fields.find((f) => f.key === key);
+      return `- ${fieldDef?.label || key}: ${val}`;
+    })
+    .join('\n');
+
+  return `${BRITZMEDI_CONTEXT}
+
+${channelConfig.formatPrompt}
+
+---
+
+## 팩트 전용 생성 규칙 (FACT-ONLY)
+
+아래 "확인된 팩트"에 나열된 사실만 사용하여 콘텐츠를 작성하세요.
+확인된 팩트에 없는 내용은 절대 추가하지 마세요.
+
+### 확인된 팩트
+카테고리: ${catDef?.label || category}
+시점: ${timingLabel}
+
+${factsSection || '(확인된 팩트 없음)'}
+
+### 시제 규칙
+${timing === 'pre'
+    ? '- 예고형: "~할 예정이다", "~에 참가한다", "~를 선보인다" 등 미래 시제 사용\n- "~했다" 등 과거형 절대 금지'
+    : '- 리뷰형: "~했다", "~를 선보였다", "~에 참가했다" 등 과거 시제 사용\n- "~할 예정이다" 등 미래형 절대 금지'}
+
+### 생성 규칙
+1. 확인된 팩트만으로 콘텐츠를 구성하세요.
+2. 정보가 부족하면 [추가 정보 필요: 내용 설명] 플레이스홀더를 넣으세요.
+3. 인용문이 확인된 팩트에 없으면 [대표 인용문 - 직접 작성 또는 확인 필요] 플레이스홀더를 넣으세요.
+4. 분량이 짧아지더라도 팩트만으로 구성하세요.
+5. BRITZMEDI 회사 기본정보와 [회사 소개] 보일러플레이트는 자유롭게 사용 가능합니다.
+6. 영문 표기: 첫 등장 시 "국문(영문)" 형태, 이후 국문으로만 통일.
+
+[회사 소개] 보일러플레이트:
+${PR_BOILERPLATE.companyIntro}
+
+위의 회사 정보, 톤앤매너 가이드, 금지어 목록, 채널별 포맷 규칙을 모두 반영하여 작성하세요.
+반드시 팩트만 사용하고, 소스에 없는 내용은 절대 지어내지 마세요.
+
+⚠️ 중요: 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지. 일반 텍스트로만 작성하고, 섹션 구분은 대괄호 라벨만 사용할 것.`;
+}
+
+/**
+ * STEP 4: Review generated content against confirmed facts (v2 JSON format).
+ */
+export function buildV2ReviewPrompt({ content, confirmedFields, channelId }) {
+  const chRules = CHANNEL_SPECIFIC_RULES[channelId] || '';
+
+  const factsRef = Object.entries(confirmedFields || {})
+    .filter(([, val]) => val !== null && val !== '' && val !== undefined)
+    .map(([key, val]) => `- ${key}: ${val}`)
+    .join('\n');
+
+  return `당신은 BRITZMEDI의 콘텐츠 품질 검수 전문가입니다.
+아래 콘텐츠를 "확인된 팩트" 목록 대비 검수하여 결과를 JSON으로 반환하세요.
+
+## 확인된 팩트 (이 사실만 콘텐츠에 포함되어야 합니다)
+${factsRef || '(없음)'}
+
+※ BRITZMEDI 회사 기본정보(설립연도, 대표, 본사, 기술)와 [회사 소개] 보일러플레이트는 검증된 정보이므로 문제로 표시하지 마세요.
+
+## 검수 규칙
+
+### 0. 팩트 비율 검증 (최우선)
+(A) 콘텐츠의 [본문] 영역을 문장 단위로 분리하세요.
+(B) 각 문장이 아래 중 어디에 해당하는지 판단:
+    - "확인된 팩트"에 직접 근거가 있는 문장 → 팩트
+    - BRITZMEDI 회사 기본정보 (설립, 대표, 기술 등) → 팩트
+    - [회사 소개] 보일러플레이트 내용 → 팩트
+    - 위 어디에도 해당하지 않는 문장 → 출처 없음
+(C) 출처 없는 각 문장을 개별 이슈로 보고
+(D) 팩트 비율 계산: 팩트 문장 수 / 전체 본문 문장 수
+
+### 1. 의료법 준수
+- 금지어: 극대화, 최소화, 최고, 최초(근거없이), 완벽한, 획기적인, 혁명적인, 완치, 100%, 확실한 효과, 부작용 없음, 안전 보장
+- 효능 단정: "~를 치료합니다", "~가 사라집니다"
+- "RF 마이크로니들링" → "TOROIDAL 고주파 기반 EBD"
+
+### 2. 영문 표기
+- 첫 등장 시 "국문(영문)" 형태인가, 이후 국문으로만 통일됐는가
+
+### 3. 시제 일관성
+- 예고형이면 미래 시제, 리뷰형이면 과거 시제가 일관적인가
+
+### 4. 구조 검증
+${chRules || '- 필수 섹션이 모두 포함되었는가'}
+
+### 5. 중복/품질
+- 같은 내용 반복, 60자 초과 장문
+
+## 검수 대상 콘텐츠
+${content}
+
+## 출력 형식
+반드시 아래 JSON 형식만 출력하세요. 다른 텍스트 없이 JSON만:
+
+{
+  "summary": {
+    "critical": 0,
+    "warning": 0,
+    "factRatio": "XX% (N/M문장)"
+  },
+  "issues": [
+    { "severity": "red", "category": "카테고리", "message": "설명", "quote": "원문 20자", "section": "섹션" },
+    ...
+  ]
+}
+
+severity는 "red"(반드시 수정) 또는 "yellow"(확인 권장)만 사용.
+문제가 없으면 issues를 빈 배열로, summary의 critical/warning은 0으로 반환.`;
 }
