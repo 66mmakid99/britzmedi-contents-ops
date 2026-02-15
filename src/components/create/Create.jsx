@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CHANNEL_CONFIGS, FACTORY_CHANNELS, PR_DERIVED_CHANNELS, PR_CATEGORIES } from '../../constants/prompts';
 import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2, autoFixContent, generateQuoteSuggestions } from '../../lib/claude';
+import { parseSections, assembleSections, assembleTextOnly } from '../../lib/sectionUtils';
 
 // v2 step labels for the stepper
 const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수/수정', '결과'];
@@ -19,36 +20,6 @@ const PR_FIXED_DEFAULTS = {
   이메일: '',
   전화번호: '010-6525-9442',
 };
-
-// =====================================================
-// Section parser
-// =====================================================
-function parseSections(raw) {
-  if (!raw) return [];
-  const regex = /\[([^\]]+)\]/g;
-  const sections = [];
-  let lastIdx = 0;
-  let lastLabel = null;
-  let match;
-  while ((match = regex.exec(raw)) !== null) {
-    if (lastLabel !== null) {
-      sections.push({ label: lastLabel, text: raw.slice(lastIdx, match.index).trim() });
-    }
-    lastLabel = match[1];
-    lastIdx = match.index + match[0].length;
-  }
-  if (lastLabel !== null) {
-    sections.push({ label: lastLabel, text: raw.slice(lastIdx).trim() });
-  }
-  if (sections.length === 0 && raw.trim()) {
-    sections.push({ label: '전체', text: raw.trim() });
-  }
-  return sections;
-}
-
-function assembleSections(sections) {
-  return sections.map((s) => `[${s.label}]\n${s.text}`).join('\n\n');
-}
 
 function assemblePR(sections, fixed) {
   const parts = sections.map((s) => `[${s.label}]\n${s.text}`);
@@ -151,11 +122,11 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   };
   const updatePrFixed = (key, val) => setPrFixed((prev) => ({ ...prev, [key]: val }));
 
-  // --- Copy all ---
+  // --- Copy all (라벨 제외) ---
   const handleCopyAll = (ch) => {
     const sections = editedSections[ch];
     if (!sections) return;
-    const text = ch === 'pressrelease' ? assemblePR(sections, prFixed) : assembleSections(sections);
+    const text = ch === 'pressrelease' ? assemblePR(sections, prFixed) : assembleTextOnly(sections);
     navigator.clipboard?.writeText(text);
     setCopyStatus(ch);
     setTimeout(() => setCopyStatus(''), 2000);
