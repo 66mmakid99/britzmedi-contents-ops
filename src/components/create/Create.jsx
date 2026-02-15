@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { CHANNEL_CONFIGS, FACTORY_CHANNELS, PR_DERIVED_CHANNELS, PR_CATEGORIES } from '../../constants/prompts';
 import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2, autoFixContent, generateQuoteSuggestions } from '../../lib/claude';
 import { parseSections, assembleSections, assembleTextOnly } from '../../lib/sectionUtils';
+import { generatePressReleaseDocx } from '../../lib/generatePressReleaseDocx';
+import { saveAs } from 'file-saver';
 
 // v2 step labels for the stepper
 const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수/수정', '결과'];
@@ -15,7 +17,7 @@ const PR_FIXED_DEFAULTS = {
   날짜: '',
   웹사이트: 'www.britzmedi.co.kr / www.britzmedi.com',
   소셜링크: 'Instagram: https://www.instagram.com/britzmedi_official\nLinkedIn: https://www.linkedin.com/company/britzmedi\nYouTube: https://www.youtube.com/@britzmedi',
-  담당자명: '이상호',
+  담당자명: '이성호',
   직책: 'CMO',
   이메일: 'sh.lee@britzmedi.co.kr',
   전화번호: '010-6525-9442',
@@ -34,33 +36,58 @@ function assemblePR(sections, fixed) {
 // =====================================================
 // Word/PDF export helpers
 // =====================================================
-function downloadAsWord(text, filename) {
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><title>${filename}</title>
-<style>body{font-family:'맑은 고딕',sans-serif;font-size:11pt;line-height:1.6;margin:2cm;}
-h1{font-size:16pt;margin-bottom:4pt;} h2{font-size:13pt;margin-top:12pt;margin-bottom:4pt;color:#333;}
-p{margin:4pt 0;}</style></head>
-<body>${text.split('\n\n').map((block) => {
-    const m = block.match(/^\[([^\]]+)\]\n?([\s\S]*)$/);
-    if (m) return `<h2>${m[1]}</h2><p>${m[2].replace(/\n/g, '<br>')}</p>`;
-    return `<p>${block.replace(/\n/g, '<br>')}</p>`;
-  }).join('')}</body></html>`;
-  const blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${filename}.doc`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+
+/** Filter out placeholder blocks from export text */
+function filterPlaceholders(text) {
+  return text.split('\n\n')
+    .filter((block) => !block.includes('[대표 인용문 - 직접 작성 또는 확인 필요]'))
+    .map((block) => block.replace(/\[입력 필요:[^\]]*\]/g, '').trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/** Build data object from PR sections and generate .docx download */
+async function handleWordDownload(sections, prFixed, selectedQuote) {
+  const getSection = (label) => sections.find((s) => s.label === label)?.text?.trim() || '';
+  const getBodySections = () => {
+    return sections
+      .filter((s) => s.label === '본문' || s.label.startsWith('본문'))
+      .map((s) => s.text?.trim())
+      .filter(Boolean)
+      .join('\n\n');
+  };
+  const getListSection = (label) => {
+    const text = getSection(label);
+    if (!text) return [];
+    return text.split('\n').map((l) => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+  };
+
+  const data = {
+    title: getSection('제목'),
+    subtitle: getSection('부제목'),
+    body: getBodySections() || getSection('전체'),
+    quote: selectedQuote || null,
+    companyIntro: getSection('회사 소개') || getSection('회사 개요'),
+    photoGuide: getListSection('사진 가이드'),
+    attachGuide: getListSection('첨부파일 가이드'),
+    tags: getSection('태그'),
+    date: prFixed.날짜 || new Date().toISOString().split('T')[0],
+    website: prFixed.웹사이트 || 'www.britzmedi.co.kr / www.britzmedi.com',
+  };
+
+  const blob = await generatePressReleaseDocx(data);
+  saveAs(blob, `${data.title || '보도자료'}.docx`);
 }
 
 function openPrintView(text, title) {
+  const clean = filterPlaceholders(text);
   const w = window.open('', '_blank');
   if (!w) return;
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>body{font-family:'맑은 고딕',sans-serif;font-size:11pt;line-height:1.8;max-width:700px;margin:40px auto;padding:0 20px;}
 h2{font-size:13pt;margin-top:20px;color:#333;border-bottom:1px solid #ddd;padding-bottom:4px;}
 p{margin:6px 0;} @media print{body{margin:0;max-width:100%;}}</style></head>
-<body><h1>${title}</h1>${text.split('\n\n').map((block) => {
+<body><h1>${title}</h1>${clean.split('\n\n').map((block) => {
     const m = block.match(/^\[([^\]]+)\]\n?([\s\S]*)$/);
     if (m) return `<h2>${m[1]}</h2><p>${m[2].replace(/\n/g, '<br>')}</p>`;
     return `<p>${block.replace(/\n/g, '<br>')}</p>`;
@@ -869,13 +896,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             {/* PR-specific export buttons */}
             {isPRChannel && (
               <div className="flex gap-2">
-                <button onClick={() => {
-                  const sections = editedSections.pressrelease || [];
-                  const text = assemblePR(sections, prFixed);
-                  const titleSec = sections.find((s) => s.label === '제목');
-                  downloadAsWord(text, titleSec?.text?.trim() || '보도자료');
-                }} className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
-                  Word 다운로드
+                <button onClick={() => handleWordDownload(editedSections.pressrelease || [], prFixed, selectedQuote)}
+                  className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
+                  Word 다운로드 (.docx)
                 </button>
                 <button onClick={() => {
                   const sections = editedSections.pressrelease || [];
