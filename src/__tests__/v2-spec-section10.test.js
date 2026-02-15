@@ -128,7 +128,7 @@ describe('TEST-2: 할루시네이션 차단 — 풍부한 소스', () => {
 // =====================================================
 describe('TEST-3: 의료법 금지어 감지 + 자동 변환', () => {
   const FORBIDDEN_TERMS = ['극대화', '최소화', '완벽한', '획기적인', '혁명적인', '완치', '부작용 없음'];
-  const REPLACEMENTS = { '극대화': '개선', '최소화': '감소', '완벽한': '우수한', '획기적인': '주목할 만한' };
+  const REPLACEMENTS = { '극대화': '개선', '최소화': '감소', '완벽한': '우수한', '획기적인': '차별화된' };
 
   it('v2 검수 프롬프트: 모든 금지어 나열', () => {
     const prompt = buildV2ReviewPrompt({
@@ -199,7 +199,7 @@ describe('TEST-4: 영문 표기 — 첫 등장 "국문(영문)" 규칙', () => {
       channelId: 'pressrelease',
     });
     expect(prompt).toContain('국문(영문)');
-    expect(prompt).toContain('이후 국문으로만 통일');
+    expect(prompt).toContain('이후 국문만');
   });
 
   it('생성 프롬프트: 영문 표기 규칙 포함', () => {

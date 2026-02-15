@@ -15,9 +15,9 @@ const PR_FIXED_DEFAULTS = {
   날짜: '',
   웹사이트: 'www.britzmedi.co.kr / www.britzmedi.com',
   소셜링크: 'Instagram: https://www.instagram.com/britzmedi_official\nLinkedIn: https://www.linkedin.com/company/britzmedi\nYouTube: https://www.youtube.com/@britzmedi',
-  담당자명: '',
-  직책: '',
-  이메일: '',
+  담당자명: '이상호',
+  직책: 'CMO',
+  이메일: 'sh.lee@britzmedi.co.kr',
   전화번호: '010-6525-9442',
 };
 
