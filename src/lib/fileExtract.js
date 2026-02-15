@@ -56,13 +56,13 @@ export async function extractTextFromFile(file) {
 }
 
 /**
- * Extract text from PDF using pdfjs-dist (dynamic import + CDN worker).
+ * Extract text from PDF using pdfjs-dist (local worker via Vite ?url import).
  */
 async function extractPDF(file) {
   const pdfjsLib = await import('pdfjs-dist');
+  const workerModule = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
 
-  // Use CDN worker to avoid bundling issues
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerModule.default;
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
