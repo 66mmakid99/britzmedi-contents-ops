@@ -164,7 +164,21 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
           {/* 생성 후: 미리보기 */}
           {generatedContents[activeChannel] && (
             <div className="space-y-3">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    if (!confirm('이 채널의 생성된 콘텐츠를 삭제하시겠습니까?')) return;
+                    setGeneratedContents(prev => {
+                      const copy = { ...prev };
+                      delete copy[activeChannel];
+                      return copy;
+                    });
+                    setChannelStates(prev => ({ ...prev, [activeChannel]: REPURPOSE_STATUS.IDLE }));
+                  }}
+                  className="px-3 py-1 text-xs border border-red-300 text-red-500 rounded-md hover:bg-red-50"
+                >
+                  삭제
+                </button>
                 <button
                   onClick={() => handleGenerate(activeChannel)}
                   className="px-3 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"

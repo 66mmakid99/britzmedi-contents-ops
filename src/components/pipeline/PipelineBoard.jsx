@@ -40,6 +40,11 @@ export default function PipelineBoard() {
     }));
   };
 
+  const deleteItem = (itemId) => {
+    if (!confirm('이 항목을 삭제하시겠습니까?')) return;
+    setItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
   const getItemsByStage = (stageId) => items.filter(item => item.stage === stageId);
 
   if (loading) {
@@ -67,6 +72,7 @@ export default function PipelineBoard() {
                 item={item}
                 stage={stage}
                 onMove={(newStage) => moveToStage(item.id, newStage)}
+                onDelete={() => deleteItem(item.id)}
               />
             ))}
 
@@ -82,7 +88,7 @@ export default function PipelineBoard() {
   );
 }
 
-function PipelineCard({ item, stage, onMove }) {
+function PipelineCard({ item, stage, onMove, onDelete }) {
   const nextStageIndex = PIPELINE_STAGES.findIndex(s => s.id === stage.id) + 1;
   const nextStage = PIPELINE_STAGES[nextStageIndex];
   const priority = PRIORITY_LEVELS.find(p => p.id === item.priority);
@@ -91,9 +97,20 @@ function PipelineCard({ item, stage, onMove }) {
     <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between">
         <h4 className="font-medium text-sm line-clamp-2">{item.title || '제목 없음'}</h4>
-        {priority && (
-          <span className={`text-xs ${priority.color}`}>{priority.name}</span>
-        )}
+        <div className="flex items-center gap-1">
+          {priority && (
+            <span className={`text-xs ${priority.color}`}>{priority.name}</span>
+          )}
+          <button
+            onClick={onDelete}
+            className="text-gray-300 hover:text-red-500 transition ml-1"
+            title="삭제"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
