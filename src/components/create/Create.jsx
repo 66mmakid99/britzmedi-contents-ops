@@ -115,27 +115,62 @@ function openPrintView(text, title) {
   const w = window.open('', '_blank');
   if (!w) return;
 
+  // 알려진 섹션 라벨 목록
+  const KNOWN_LABELS = ['제목', '부제목', '본문', '본문1', '본문2', '본문3', '본문4', '본문5',
+    '회사 소개', '회사 개요', '출처', '날짜', '웹사이트', '소셜 링크', '연락처',
+    '인트로', '프리헤더', '핵심요약', 'CTA', '사진 가이드', '첨부파일 가이드',
+    '훅', '핵심 포인트', '캡션', '이미지 가이드', '해시태그', 'SEO 키워드',
+    '도입부', '태그', '인용문'];
+
   // 섹션 파싱 (라벨 제거, 내용만 추출)
   const sections = {};
   let currentLabel = null;
   clean.split('\n\n').forEach((block) => {
+    // 1) [라벨] 형식 매칭
     const m = block.match(/^\[([^\]]+)\]\n?([\s\S]*)$/);
     if (m) {
       currentLabel = m[1];
       sections[currentLabel] = (sections[currentLabel] || '') + m[2].trim();
-    } else if (currentLabel) {
-      sections[currentLabel] = (sections[currentLabel] || '') + '\n\n' + block.trim();
+    // 2) 대괄호 없이 라벨만 있는 줄 매칭 (예: "제목\n내용" 또는 "본문\n내용")
     } else {
-      sections['_body'] = (sections['_body'] || '') + '\n\n' + block.trim();
+      const lines = block.split('\n');
+      const firstLine = lines[0].trim();
+      if (KNOWN_LABELS.includes(firstLine) && lines.length > 1) {
+        currentLabel = firstLine;
+        const content = lines.slice(1).join('\n').trim();
+        sections[currentLabel] = (sections[currentLabel] || '') + (sections[currentLabel] ? '\n\n' : '') + content;
+      } else if (KNOWN_LABELS.includes(firstLine) && lines.length === 1) {
+        // 라벨만 있는 블록 (내용은 다음 블록에)
+        currentLabel = firstLine;
+      } else if (currentLabel) {
+        sections[currentLabel] = (sections[currentLabel] || '') + '\n\n' + block.trim();
+      } else {
+        sections['_body'] = (sections['_body'] || '') + '\n\n' + block.trim();
+      }
     }
   });
 
-  const titleText = sections['제목'] || title;
-  const subtitle = sections['부제목'] || '';
+  // _body에 남은 텍스트에서 라벨 텍스트 제거 (안전장치)
+  if (sections['_body']) {
+    let body = sections['_body'];
+    KNOWN_LABELS.forEach((label) => {
+      body = body.replace(new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'gm'), '');
+    });
+    sections['_body'] = body.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  const titleText = (sections['제목'] || title || '').trim();
+  const subtitle = (sections['부제목'] || '').trim();
+  const EXCLUDE_KEYS = ['제목', '부제목', '회사 소개', '회사 개요', '출처', '날짜', '웹사이트', '소셜 링크', '연락처',
+    '사진 가이드', '첨부파일 가이드', '태그', '해시태그', 'SEO 키워드', '_body'];
   const bodyParts = Object.entries(sections)
-    .filter(([k]) => !['제목', '부제목', '회사 소개', '회사 개요', '출처', '날짜', '웹사이트', '소셜 링크', '연락처'].includes(k))
+    .filter(([k]) => !EXCLUDE_KEYS.includes(k))
     .map(([, v]) => v.trim())
     .filter(Boolean);
+  // _body가 있고 다른 본문 섹션이 없으면 _body를 본문으로 사용
+  if (bodyParts.length === 0 && sections['_body']?.trim()) {
+    bodyParts.push(sections['_body'].trim());
+  }
   const companyIntro = sections['회사 소개'] || sections['회사 개요'] || '';
   const contact = sections['연락처'] || '';
 
