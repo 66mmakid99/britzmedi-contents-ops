@@ -122,7 +122,7 @@ function numberedTable(headerText, items) {
  * @param {string} data.website
  */
 export async function generatePressReleaseDocx(data) {
-  // Filter out placeholder text + photo/attachment guide sections
+  // Filter out placeholder text + photo/attachment guide sections + section labels
   const cleanBody = (data.body || '')
     .replace(/\[대표 인용문[^\]]*\]/g, '')
     .replace(/\[QUOTE_PLACEHOLDER\]/g, '')
@@ -135,6 +135,11 @@ export async function generatePressReleaseDocx(data) {
     .replace(/\[첨부파일?\s*가이드\][\s\S]*?(?=\[회사\s*소개\]|뉴스와이어|\n\n\n|$)/gi, '')
     .replace(/사진 가이드[\s\S]*?(?=회사 소개|첨부파일|뉴스와이어|\n\n\n|$)/gi, '')
     .replace(/첨부파일 가이드[\s\S]*?(?=회사 소개|뉴스와이어|\n\n\n|$)/gi, '')
+    .replace(/^\[제목\]\s*\n?/gm, '')
+    .replace(/^\[부제목\]\s*\n?/gm, '')
+    .replace(/^\[본문\]\s*\n?/gm, '')
+    .replace(/^\[이미지\s*가이드\][\s\S]*?(?=\[|$)/gm, '')
+    .replace(/^\[이미지\s*생성\s*프롬프트\][\s\S]*?(?=\[|$)/gm, '')
     .trim();
 
   const bodyParagraphs = cleanBody.split('\n\n').filter(Boolean).map((para) =>

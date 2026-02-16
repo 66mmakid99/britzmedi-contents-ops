@@ -28,6 +28,20 @@ async function callClaudeForChannel(prompt, apiKey, maxTokens = 2000) {
   return data.content?.map((b) => (b.type === 'text' ? b.text : '')).join('') || '';
 }
 
+// 마크다운 마크업 제거 필터
+function stripMarkdown(text) {
+  if (!text) return text;
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')       // **굵게** → 굵게
+    .replace(/\*(.*?)\*/g, '$1')            // *이탤릭* → 이탤릭
+    .replace(/^#{1,6}\s+/gm, '')            // ## 제목 → 제목
+    .replace(/^[-*+]\s+/gm, '· ')           // - 불릿 → · 불릿
+    .replace(/`{1,3}(.*?)`{1,3}/gs, '$1')   // `코드` → 코드
+    .replace(/^>\s+/gm, '')                 // > 인용 → 인용
+    .replace(/---+/g, '')                   // --- 구분선 → 제거
+    .replace(/\n{3,}/g, '\n\n');            // 과도한 빈줄 정리
+}
+
 /**
  * 단일 채널 콘텐츠 생성
  */
@@ -41,8 +55,9 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   const prompt = getRepurposePrompt(channelId, pressRelease, options);
   const maxTokens = (channelId === 'kakao' || channelId === 'instagram') ? 1000 : 2000;
   const response = await callClaudeForChannel(prompt, apiKey, maxTokens);
+  const cleanedResponse = stripMarkdown(response);
 
-  return parseChannelResponse(channelId, response);
+  return parseChannelResponse(channelId, cleanedResponse);
 }
 
 /**

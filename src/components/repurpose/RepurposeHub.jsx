@@ -85,7 +85,7 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
       </details>
 
       {/* 5채널 카드 그리드 */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         {REPURPOSE_CHANNELS.map(channel => (
           <ChannelCard
             key={channel.id}
