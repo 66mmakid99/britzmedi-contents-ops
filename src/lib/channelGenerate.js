@@ -211,6 +211,11 @@ function parseNaverBlog(text) {
   body = body.replace(/제목:\s*.+\n?/, '');
   // 섹션 라벨 제거하되 내용 유지
   body = removeSectionLabels(body);
+  // 대괄호 없는 라벨도 제거 (AI가 가끔 대괄호 없이 출력할 때 대비)
+  const BARE_LABELS = ['제목', '부제목', '도입부', '핵심요약', 'SEO 키워드', 'SEO키워드', 'CTA', '태그', '소제목1', '소제목2', '소제목3'];
+  BARE_LABELS.forEach(label => {
+    body = body.replace(new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'gm'), '');
+  });
   body = body.replace(/\n{3,}/g, '\n\n').trim();
 
   return {
