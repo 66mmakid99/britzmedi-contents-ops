@@ -25,3 +25,25 @@ ALTER TABLE press_release_images ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all for press_release_images"
   ON press_release_images FOR ALL
   USING (true) WITH CHECK (true);
+
+-- =====================================================
+-- Storage Policies for "press-release-images" bucket
+-- PUBLIC bucket = public READ only.
+-- Upload/Delete require explicit policies below.
+-- =====================================================
+
+CREATE POLICY "Allow public uploads to press-release-images"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'press-release-images');
+
+CREATE POLICY "Allow public reads from press-release-images"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'press-release-images');
+
+CREATE POLICY "Allow public updates to press-release-images"
+  ON storage.objects FOR UPDATE
+  USING (bucket_id = 'press-release-images');
+
+CREATE POLICY "Allow public deletes from press-release-images"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'press-release-images');
