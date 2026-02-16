@@ -53,13 +53,25 @@ export default function App() {
   };
 
   const handleCreateFromPR = (prItem) => {
-    setPrSourceData({
+    setRepurposePR({
       id: prItem.id,
       title: prItem.title,
       date: prItem.date,
+      body: typeof prItem.draft === 'string' ? prItem.draft : JSON.stringify(prItem.draft),
       draft: typeof prItem.draft === 'string' ? prItem.draft : JSON.stringify(prItem.draft),
     });
-    setActivePage('create');
+    setActivePage('repurpose');
+  };
+
+  const handleGoToRepurpose = (prData) => {
+    setRepurposePR({
+      id: prData.id || Date.now(),
+      title: prData.title,
+      date: prData.date,
+      body: prData.draft || prData.body || '',
+      draft: prData.draft || prData.body || '',
+    });
+    setActivePage('repurpose');
   };
 
   return (
@@ -103,6 +115,7 @@ export default function App() {
             prSourceData={prSourceData}
             onClearPRSource={() => { setPrSourceData(null); setActivePage('pipeline'); }}
             knowledgeBase={kbEntries}
+            onGoToRepurpose={handleGoToRepurpose}
           />
         )}
         {activePage === 'repurpose' && (

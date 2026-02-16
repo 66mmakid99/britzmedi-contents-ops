@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { CHANNEL_CONFIGS, FACTORY_CHANNELS, PR_DERIVED_CHANNELS, PR_CATEGORIES } from '../../constants/prompts';
+import { CHANNEL_CONFIGS, PR_CATEGORIES } from '../../constants/prompts';
 import { SPOKESPERSONS, getRecommendedSpokesperson } from '../../constants/index';
 import { uploadPressReleaseImage, deletePressReleaseImage } from '../../lib/imageUpload';
-import { generateFromPR, reviewMultiChannel, parseContent, generateFromFacts, reviewV2, autoFixContent, generateQuoteSuggestions } from '../../lib/claude';
+import { parseContent, generateFromFacts, reviewV2, autoFixContent, generateQuoteSuggestions } from '../../lib/claude';
 import { parseSections, assembleSections, assembleTextOnly } from '../../lib/sectionUtils';
 import { generatePressReleaseDocx } from '../../lib/generatePressReleaseDocx';
 import { saveAs } from 'file-saver';
@@ -110,9 +110,9 @@ p{margin:6px 0;} @media print{body{margin:0;max-width:100%;}}</style></head>
 // =====================================================
 // Main Component
 // =====================================================
-export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClearPRSource, knowledgeBase }) {
+export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClearPRSource, knowledgeBase, onGoToRepurpose }) {
   // --- Shared state ---
-  const [selectedChannels, setSelectedChannels] = useState([]);
+  const [selectedChannels, setSelectedChannels] = useState(['pressrelease']);
   const [showKey, setShowKey] = useState(false);
   const [editedSections, setEditedSections] = useState({});
   const [prFixed, setPrFixed] = useState({ ...PR_FIXED_DEFAULTS });
@@ -194,9 +194,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setTimeout(() => setCopyStatus(''), 2000);
   };
 
-  const toggleChannel = (ch) => {
-    setSelectedChannels((prev) => prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]);
-  };
+  // Channel auto-selected as 'pressrelease' — no toggle needed
 
   // --- Reset ---
   const resetAll = () => {
@@ -322,7 +320,6 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   /** STEP 2 → 3 → 4 → 5: Generate + Review + Quote suggestions */
   const handleV2Generate = async () => {
     if (!apiKey) { setShowKey(true); return; }
-    if (!selectedChannels.length) return;
     setV2Step('generating');
     setV2Error('');
     setRegistered(false);
@@ -602,108 +599,22 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setRegistered(true);
   };
 
-  // ===========================================
-  // RENDER — FROM-PR MODE (unchanged)
-  // ===========================================
+  // FROM-PR mode now redirects to repurpose page (handled in App.jsx)
   if (isFromPR) {
-    return (
-      <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">채널 콘텐츠 만들기</h2>
-          <button onClick={resetAll} className="text-[12px] text-mist hover:text-steel border-none bg-transparent cursor-pointer">취소</button>
-        </div>
-
-        <div className="bg-accent/5 rounded-xl p-4 border border-accent/20">
-          <div className="text-[11px] font-semibold text-accent mb-1">원본 보도자료</div>
-          <div className="text-[13px] font-bold">{prSourceData.title}</div>
-          <div className="text-[11px] text-steel mt-1">{prSourceData.date}</div>
-        </div>
-
-        <APIKeyBox apiKey={apiKey} setApiKey={setApiKey} showKey={showKey} setShowKey={setShowKey} />
-
-        {!genResults && (
-          <div className="bg-white rounded-xl p-5 border border-pale space-y-4">
-            <div>
-              <div className="text-[13px] font-bold mb-1">채널을 선택하세요 (복수 가능)</div>
-              <div className="text-[11px] text-mist">보도자료 원문을 각 채널 포맷으로 AI가 재가공합니다</div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {PR_DERIVED_CHANNELS.map((ch) => {
-                const cfg = CHANNEL_CONFIGS[ch];
-                const selected = selectedChannels.includes(ch);
-                return (
-                  <button key={ch} onClick={() => toggleChannel(ch)}
-                    className={`p-4 rounded-xl text-left border cursor-pointer transition-all ${
-                      selected ? 'bg-accent/10 border-accent shadow-sm' : 'bg-white border-pale hover:border-silver'
-                    }`}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center text-[11px] ${
-                        selected ? 'bg-accent border-accent text-white' : 'border-silver bg-white'
-                      }`}>{selected ? '✓' : ''}</div>
-                      <span className="text-[13px] font-bold">{cfg.name}</span>
-                    </div>
-                    <div className="text-[11px] text-mist mt-1.5 ml-7">{cfg.charTarget}</div>
-                  </button>
-                );
-              })}
-            </div>
-            <button onClick={handleGenerateFromPR} disabled={loading || !selectedChannels.length}
-              className={`w-full py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
-                loading ? 'bg-mist text-white cursor-wait' : selectedChannels.length ? 'bg-accent text-white hover:bg-accent-dim' : 'bg-pale text-mist cursor-not-allowed'
-              }`}>
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  {selectedChannels.length}개 채널 생성 중...
-                </span>
-              ) : `채널 콘텐츠 생성하기 (${selectedChannels.length}채널)`}
-            </button>
-          </div>
-        )}
-
-        {genResults && (
-          <ResultsView
-            genResults={genResults} selectedChannels={selectedChannels}
-            activeResultTab={activeResultTab} setActiveResultTab={setActiveResultTab}
-            editedSections={editedSections} updateSection={updateSection}
-            handleCopyAll={handleCopyAll} copyStatus={copyStatus} setCopyStatus={setCopyStatus}
-            loading={loading} onRegenerate={handleGenerateFromPR}
-            isPR={false} prFixed={prFixed} updatePrFixed={updatePrFixed}
-            reviewResults={reviewResults} reviewing={reviewing} hasRedIssues={hasRedIssues}
-            bottomActions={
-              <div className="flex gap-2">
-                <button onClick={resetAll} className="px-5 py-3 rounded-lg text-[13px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">취소</button>
-                {hasRedIssues ? (
-                  <div className="flex-1 py-3 rounded-lg text-[13px] font-bold text-center text-danger bg-danger/5 border border-danger/20">
-                    수정 후 내보내기 — 필수 수정 사항을 먼저 해결하세요
-                  </div>
-                ) : (
-                  <button onClick={handleRegisterFromPR} disabled={registered}
-                    className={`flex-1 py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
-                      registered ? 'bg-success text-white cursor-default' : 'bg-dark text-white hover:bg-charcoal'
-                    }`}>
-                    {registered ? '파이프라인에 등록 완료 ✓' : `${selectedChannels.length}개 채널 콘텐츠 파이프라인에 등록`}
-                  </button>
-                )}
-              </div>
-            }
-          />
-        )}
-      </div>
-    );
+    onClearPRSource?.();
+    return null;
   }
 
   // ===========================================
   // RENDER — V2 FACTORY MODE (6-step flow)
   // ===========================================
   const v2StepIdx = V2_STEP_INDEX[v2Step] ?? 0;
-  const isPRChannel = selectedChannels.includes('pressrelease');
-  const hasNonPRSelected = selectedChannels.some((ch) => ch !== 'pressrelease');
+  const isPRChannel = true; // Always pressrelease
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold">콘텐츠 팩토리 v2</h2>
+        <h2 className="text-lg font-bold">보도자료 제작</h2>
         {v2Step !== 'input' && (
           <button onClick={resetAll} className="text-[12px] text-mist hover:text-steel border-none bg-transparent cursor-pointer">처음부터 다시</button>
         )}
@@ -755,43 +666,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             <div className="text-[11px] text-mist text-right">{sourceText.length}자</div>
           </div>
 
-          {/* Channel selection */}
-          <div className="bg-white rounded-xl p-5 border border-pale space-y-3">
-            <div>
-              <div className="text-[13px] font-bold mb-1">발행 채널</div>
-              <div className="text-[11px] text-mist">
-                {isPRChannel
-                  ? '보도자료는 단독 생성됩니다'
-                  : '팩트 기반으로 각 채널 포맷에 맞게 생성됩니다 (복수 선택 가능)'}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {FACTORY_CHANNELS.map((ch) => {
-                const cfg = CHANNEL_CONFIGS[ch];
-                const selected = selectedChannels.includes(ch);
-                const disabled = (ch === 'pressrelease' && hasNonPRSelected) || (ch !== 'pressrelease' && isPRChannel);
-                return (
-                  <button key={ch} onClick={() => toggleChannel(ch)} disabled={disabled}
-                    className={`p-3 rounded-lg text-left border transition-all ${
-                      disabled ? 'opacity-40 cursor-not-allowed bg-pale border-pale'
-                      : selected ? 'bg-accent/10 border-accent cursor-pointer'
-                      : 'bg-white border-pale hover:border-silver cursor-pointer'
-                    }`}>
-                    <div className="flex items-center gap-1.5">
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center text-[9px] ${
-                        selected ? 'bg-accent border-accent text-white' : 'border-silver bg-white'
-                      }`}>{selected ? '✓' : ''}</div>
-                      <span className="text-[12px] font-semibold">{cfg.name}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            {isPRChannel && (
-              <div className="text-[11px] text-accent bg-accent/5 rounded-lg px-3 py-2 border border-accent/10">
-                보도자료 발행 완료 후 "채널 콘텐츠 만들기"에서 네이버/카카오톡 등으로 재가공할 수 있습니다.
-              </div>
-            )}
+          {/* Channel info (auto-selected: pressrelease) */}
+          <div className="text-[11px] text-accent bg-accent/5 rounded-lg px-3 py-2 border border-accent/10">
+            보도자료 생성 후 "채널 콘텐츠 만들기"에서 네이버/카카오톡/LinkedIn/인스타그램으로 재가공할 수 있습니다.
           </div>
 
           {/* Timing selection */}
@@ -819,22 +696,18 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
           <button
             type="button"
             onClick={handleV2Parse}
-            disabled={!sourceText.trim() || !selectedChannels.length}
+            disabled={!sourceText.trim()}
             className={`w-full py-3.5 rounded-lg text-[14px] font-bold border-none transition-colors ${
-              sourceText.trim() && selectedChannels.length
+              sourceText.trim()
                 ? 'bg-accent text-white hover:bg-accent-dim cursor-pointer active:scale-[0.98]'
                 : 'bg-silver/50 text-mist cursor-not-allowed'
             }`}
           >
             소스 파싱 시작 (STEP 1)
           </button>
-          {(!sourceText.trim() || !selectedChannels.length) && (
+          {!sourceText.trim() && (
             <div className="text-[11px] text-danger text-center -mt-2">
-              {!sourceText.trim() && !selectedChannels.length
-                ? '⬆ 소스 텍스트를 입력하고 발행 채널을 선택하세요'
-                : !sourceText.trim()
-                  ? '⬆ 소스 텍스트를 입력하세요'
-                  : '⬆ 발행 채널을 선택하세요'}
+              ⬆ 소스 텍스트를 입력하세요
             </div>
           )}
         </div>
@@ -931,7 +804,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
                 </span> / {PR_CATEGORIES[selectedCategory]?.fields.length || 0}개 필드
               </div>
               <div className="text-[11px] text-mist mt-1">
-                채널: {selectedChannels.map((ch) => CHANNEL_CONFIGS[ch]?.name).join(', ')} | 시점: {timing === 'pre' ? '예고형' : '리뷰형'} | 대변인: {spokespersonName || '미지정'} ({SPOKESPERSONS[spokespersonKey]?.role})
+                채널: 보도자료 | 시점: {timing === 'pre' ? '예고형' : '리뷰형'} | 대변인: {spokespersonName || '미지정'} ({SPOKESPERSONS[spokespersonKey]?.role})
               </div>
             </div>
           </div>
@@ -942,7 +815,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               className="px-5 py-3 rounded-lg text-[13px] text-slate border border-pale bg-white cursor-pointer hover:bg-snow">이전</button>
             <button onClick={handleV2Generate}
               className="flex-1 py-3 rounded-lg text-[14px] font-bold bg-accent text-white border-none cursor-pointer hover:bg-accent-dim">
-              팩트 확인 완료 → 생성 (STEP 3)
+              팩트 확인 완료 → 보도자료 생성 (STEP 3)
             </button>
           </div>
         </div>
@@ -952,7 +825,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       {/* STEP 3: Generating (loading)   */}
       {/* ============================== */}
       {v2Step === 'generating' && (
-        <LoadingCard title={`팩트 기반 콘텐츠 생성 중... (${selectedChannels.length}채널)`} subtitle="확인된 팩트만으로 콘텐츠를 작성하고 있습니다" />
+        <LoadingCard title="팩트 기반 보도자료 생성 중..." subtitle="확인된 팩트만으로 보도자료를 작성하고 있습니다" />
       )}
 
       {/* ============================== */}
@@ -1081,6 +954,25 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
                 {registered ? '파이프라인에 등록 완료 ✓' : '파이프라인에 등록'}
               </button>
             </div>
+
+            {/* Go to channel repurpose */}
+            {registered && onGoToRepurpose && (
+              <button
+                onClick={() => {
+                  const sections = editedSections.pressrelease || [];
+                  const titleSec = sections.find((s) => s.label === '제목');
+                  const fullText = assemblePR(sections, prFixed);
+                  onGoToRepurpose({
+                    title: titleSec?.text?.trim() || '보도자료',
+                    date: prFixed.날짜 || new Date().toISOString().split('T')[0],
+                    draft: fullText,
+                  });
+                }}
+                className="w-full py-3.5 rounded-lg text-[14px] font-bold bg-accent text-white border-none cursor-pointer hover:bg-accent-dim transition-colors"
+              >
+                📢 채널 콘텐츠 만들기
+              </button>
+            )}
           </div>
         </div>
       )}

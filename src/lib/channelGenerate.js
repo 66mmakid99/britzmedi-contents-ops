@@ -39,7 +39,7 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   if (!channel) throw new Error(`알 수 없는 채널: ${channelId}`);
 
   const prompt = getRepurposePrompt(channelId, pressRelease, options);
-  const maxTokens = channelId === 'kakao' ? 1000 : 2000;
+  const maxTokens = (channelId === 'kakao' || channelId === 'instagram') ? 1000 : 2000;
   const response = await callClaudeForChannel(prompt, apiKey, maxTokens);
 
   return parseChannelResponse(channelId, response);
@@ -79,8 +79,9 @@ function parseChannelResponse(channelId, rawResponse) {
       return parseInstagram(text);
     case 'linkedin':
       return parseLinkedin(text);
+    case 'newsletter':
     default:
-      return { body: text };
+      return { body: text, charCount: text.length };
   }
 }
 
@@ -115,35 +116,19 @@ function parseKakao(text) {
 }
 
 function parseInstagram(text) {
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        slides: parsed.slides || [],
-        hashtags: parsed.hashtags || [],
-        caption: parsed.caption || '',
-        charCount: parsed.slides?.join('').length || 0,
-      };
-    }
-  } catch {
-    // JSON 파싱 실패 시 텍스트 기반 파싱
-  }
+  // Parse section-based format: [캡션], [이미지 가이드], [해시태그]
+  const captionMatch = text.match(/\[캡션\]\s*([\s\S]*?)(?=\[이미지|$)/);
+  const hashtagMatch = text.match(/\[해시태그\]\s*([\s\S]*?)$/);
 
-  const slides = text.split(/\n\n+/)
-    .filter(s => s.trim())
-    .map(s => s.replace(/^슬라이드\s*\d+[:\s]*/i, '').trim());
-
-  const hashtagLine = slides.find(s => s.startsWith('#'));
-  const hashtags = hashtagLine
-    ? hashtagLine.match(/#(\S+)/g)?.map(t => t.replace('#', '')) || []
-    : [];
+  const caption = captionMatch?.[1]?.trim() || text.trim();
+  const hashtagText = hashtagMatch?.[1]?.trim() || '';
+  const hashtags = hashtagText.match(/#(\S+)/g)?.map(t => t.replace('#', '')) || [];
 
   return {
-    slides: slides.filter(s => !s.startsWith('#')),
+    body: caption,
     hashtags,
-    caption: '',
-    charCount: slides.join('').length,
+    caption,
+    charCount: caption.length,
   };
 }
 

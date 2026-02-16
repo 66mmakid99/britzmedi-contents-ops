@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import NaverBlogPreview from './previews/NaverBlogPreview';
-import InstagramCarouselPreview from './previews/InstagramPreview';
 
 export default function ChannelPreview({ channel, content, onEdit }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -22,12 +21,7 @@ export default function ChannelPreview({ channel, content, onEdit }) {
         textToCopy = content.body || '';
         break;
       case 'instagram':
-        textToCopy = [
-          ...(content.slides || []).map((s, i) => `[슬라이드 ${i + 1}]\n${s}`),
-          '',
-          '---해시태그---',
-          (content.hashtags || []).map(t => `#${t}`).join(' ')
-        ].join('\n\n');
+        textToCopy = (content.caption || content.body || '') + '\n\n' + (content.hashtags || []).map(t => `#${t}`).join(' ');
         break;
       case 'linkedin':
         textToCopy = content.body || '';
@@ -47,7 +41,6 @@ export default function ChannelPreview({ channel, content, onEdit }) {
       case 'naver-blog':
         return <NaverBlogPreview content={content} isEditing={isEditing} onEdit={handleEdit} />;
       case 'instagram':
-        return <InstagramCarouselPreview content={content} isEditing={isEditing} onEdit={handleEdit} />;
       case 'kakao':
       case 'linkedin':
       default:
@@ -101,7 +94,7 @@ export default function ChannelPreview({ channel, content, onEdit }) {
 
       {/* 글자수 카운터 */}
       <div className="mt-3 text-xs text-gray-400 text-right">
-        {(content.body || '').length}자
+        {(content.body || content.caption || '').length}자
         ({channel.charRange.min}~{channel.charRange.max}자 권장)
       </div>
     </div>

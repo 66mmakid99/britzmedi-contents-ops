@@ -47,7 +47,7 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
     return (
       <div className="space-y-6">
         <h2 className="text-lg font-bold">채널 재가공</h2>
-        <p className="text-sm text-gray-500">보도자료를 선택하면 4개 채널로 재가공할 수 있습니다.</p>
+        <p className="text-sm text-gray-500">보도자료를 선택하면 5개 채널로 재가공할 수 있습니다.</p>
         {prList.length > 0 ? (
           <div className="space-y-2">
             {prList.map(item => (
@@ -84,8 +84,8 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
         </div>
       </details>
 
-      {/* 4채널 카드 그리드 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 5채널 카드 그리드 */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {REPURPOSE_CHANNELS.map(channel => (
           <ChannelCard
             key={channel.id}
