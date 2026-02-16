@@ -85,6 +85,8 @@ function removeSectionLabels(text) {
     .replace(/^\[도입부\]\s*/gm, '')
     .replace(/^\[소제목\d*\]\s*/gm, '')
     .replace(/^\[태그\]\s*/gm, '')
+    .replace(/^\[첫 댓글용 링크\]\s*/gm, '')
+    .replace(/^\[푸터\]\s*/gm, '')
     .trim();
 }
 
@@ -155,7 +157,7 @@ function parseChannelResponse(channelId, rawResponse) {
 // =====================================================
 
 function parseNewsletter(text) {
-  const sections = extractSections(text, ['제목', '프리헤더', '인트로', '본문1', '본문2', '본문3', '핵심요약', 'CTA']);
+  const sections = extractSections(text, ['제목', '프리헤더', '인트로', '본문1', '본문2', '본문3', '핵심요약', 'CTA', '푸터']);
 
   // 섹션이 파싱되면 구조화, 안 되면 전체 텍스트
   if (sections['제목'] || sections['인트로']) {
@@ -172,6 +174,7 @@ function parseNewsletter(text) {
       title: sections['제목'] || '',
       preheader: sections['프리헤더'] || '',
       body,
+      footer: sections['푸터'] || '',
       charCount: body.length,
     };
   }
@@ -280,11 +283,17 @@ function parseInstagram(text) {
 }
 
 function parseLinkedin(text) {
-  // 이중언어 체크
-  const koMatch = text.match(/---\s*한국어\s*---\s*([\s\S]*?)---\s*English\s*---/i);
-  const enMatch = text.match(/---\s*English\s*---\s*([\s\S]*?)$/i);
+  // 첫 댓글용 링크 추출 (있으면)
+  const firstCommentMatch = text.match(/\[첫 댓글용 링크\]\s*([\s\S]*?)(?=\[해시태그\]|$)/);
+  const firstComment = firstCommentMatch?.[1]?.trim() || '';
+  // 첫 댓글용 링크 섹션 제거
+  let processedText = text.replace(/\[첫 댓글용 링크\][\s\S]*?(?=\[해시태그\]|$)/, '');
 
-  let mainBody = text;
+  // 이중언어 체크
+  const koMatch = processedText.match(/---\s*한국어\s*---\s*([\s\S]*?)---\s*English\s*---/i);
+  const enMatch = processedText.match(/---\s*English\s*---\s*([\s\S]*?)$/i);
+
+  let mainBody = processedText;
   let bodyEn = null;
 
   if (koMatch && enMatch) {
@@ -314,6 +323,7 @@ function parseLinkedin(text) {
   return {
     body: cleanBody,
     bodyEn: bodyEn || null,
+    firstComment,
     hashtags: allHashtags,
     language: bodyEn ? 'ko+en' : 'ko',
     charCount: cleanBody.length,
