@@ -82,7 +82,11 @@ function removeSectionLabels(text) {
     .replace(/^\[해시태그\]\s*/gm, '')
     .replace(/^\[SEO 키워드\]\s*/gm, '')
     .replace(/^\[SEO키워드\]\s*/gm, '')
+    .replace(/^\[핵심키워드\]\s*/gm, '')
+    .replace(/^\[보조키워드\]\s*/gm, '')
     .replace(/^\[도입부\]\s*/gm, '')
+    .replace(/^\[서론\]\s*/gm, '')
+    .replace(/^\[결론\]\s*/gm, '')
     .replace(/^\[소제목\d*\]\s*/gm, '')
     .replace(/^\[태그\]\s*/gm, '')
     .replace(/^\[첫 댓글용 링크\]\s*/gm, '')
@@ -101,7 +105,8 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   if (!channel) throw new Error(`알 수 없는 채널: ${channelId}`);
 
   const prompt = getRepurposePrompt(channelId, pressRelease, options);
-  const maxTokens = (channelId === 'kakao' || channelId === 'instagram') ? 1000 : 2000;
+  const maxTokens = (channelId === 'kakao' || channelId === 'instagram') ? 1000
+    : channelId === 'naver-blog' ? 3000 : 2000;
   const response = await callClaudeForChannel(prompt, apiKey, maxTokens);
 
   // 1단계: 마크다운 제거
@@ -184,9 +189,16 @@ function parseNewsletter(text) {
 }
 
 function parseNaverBlog(text) {
-  // SEO 키워드 추출
-  const keywordsMatch = text.match(/\[SEO\s*키워드\]\s*(.+)/i) || text.match(/SEO키워드:\s*(.+)/);
-  const seoKeywords = keywordsMatch?.[1]?.split(',').map(k => k.trim()).filter(Boolean) || [];
+  // 핵심키워드 추출 (신규 형식 우선, 구 형식 폴백)
+  const coreKwMatch = text.match(/\[핵심키워드\]\s*(.+)/) || text.match(/\[SEO\s*키워드\]\s*(.+)/i) || text.match(/SEO키워드:\s*(.+)/);
+  const coreKeywords = coreKwMatch?.[1]?.split(',').map(k => k.trim()).filter(Boolean) || [];
+
+  // 보조키워드 추출
+  const subKwMatch = text.match(/\[보조키워드\]\s*(.+)/);
+  const subKeywords = subKwMatch?.[1]?.split(',').map(k => k.trim()).filter(Boolean) || [];
+
+  // 통합 SEO 키워드 (하위 호환)
+  const seoKeywords = [...coreKeywords, ...subKeywords];
 
   // 태그 추출
   const tagMatch = text.match(/\[태그\]\s*([\s\S]*?)(?=\[|$)/);
@@ -206,7 +218,9 @@ function parseNaverBlog(text) {
 
   // 본문: 라벨과 메타 제거 후 깨끗한 텍스트
   let body = text;
-  // SEO키워드/태그 라인 제거
+  // 키워드/태그 라인 제거
+  body = body.replace(/\[핵심키워드\]\s*.+/gi, '');
+  body = body.replace(/\[보조키워드\]\s*.+/gi, '');
   body = body.replace(/\[SEO\s*키워드\]\s*.+/gi, '');
   body = body.replace(/SEO키워드:\s*.+/g, '');
   body = body.replace(/\[태그\]\s*[\s\S]*?(?=\[|$)/g, '');
@@ -215,7 +229,7 @@ function parseNaverBlog(text) {
   // 섹션 라벨 제거하되 내용 유지
   body = removeSectionLabels(body);
   // 대괄호 없는 라벨도 제거 (AI가 가끔 대괄호 없이 출력할 때 대비)
-  const BARE_LABELS = ['제목', '부제목', '도입부', '핵심요약', 'SEO 키워드', 'SEO키워드', 'CTA', '태그', '소제목1', '소제목2', '소제목3'];
+  const BARE_LABELS = ['제목', '부제목', '도입부', '서론', '결론', '핵심요약', '핵심키워드', '보조키워드', 'SEO 키워드', 'SEO키워드', 'CTA', '태그', '소제목1', '소제목2', '소제목3', '소제목4', '소제목5'];
   BARE_LABELS.forEach(label => {
     body = body.replace(new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'gm'), '');
   });
@@ -225,6 +239,8 @@ function parseNaverBlog(text) {
     title,
     body,
     seoKeywords,
+    coreKeywords,
+    subKeywords,
     tags,
     imagePositions,
     charCount: body.length,
