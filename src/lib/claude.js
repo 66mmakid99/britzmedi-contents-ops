@@ -3,24 +3,33 @@ import { formatKBForPrompt } from '../constants/knowledgeBase';
 
 const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
 
-async function callClaude(prompt, apiKey, maxTokens = 4000) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+async function callClaude(prompt, apiKey, maxTokens = 4000, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `API error ${res.status}`);
+    // 529 Overloaded → 재시도 (지수 백오프)
+    if (res.status === 529 && attempt < retries - 1) {
+      await new Promise((r) => setTimeout(r, (attempt + 1) * 2000));
+      continue;
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `API error ${res.status}`);
+    }
+
+    const data = await res.json();
+    return data.content?.map((b) => (b.type === 'text' ? b.text : '')).join('') || '';
   }
-
-  const data = await res.json();
-  return data.content?.map((b) => (b.type === 'text' ? b.text : '')).join('') || '';
+  throw new Error('API 과부하 상태입니다. 잠시 후 다시 시도해주세요.');
 }
 
 /**
