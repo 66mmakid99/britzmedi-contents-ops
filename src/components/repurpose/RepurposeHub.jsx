@@ -1,10 +1,10 @@
 /**
- * RepurposeHub: 보도자료 선택 → 4채널 재가공 허브
+ * RepurposeHub: 보도자료 선택 → 5채널 재가공 허브
+ * UI: 탭 기반 — 채널 탭 선택 → 생성 → 미리보기 → 복사
  */
 
 import { useState, useEffect } from 'react';
 import { REPURPOSE_CHANNELS, REPURPOSE_STATUS } from '../../constants/channels';
-import ChannelCard from './ChannelCard';
 import ChannelPreview from './ChannelPreview';
 import { generateChannelContent } from '../../lib/channelGenerate';
 
@@ -13,7 +13,7 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
   const [activeChannel, setActiveChannel] = useState(null);
   const [generatedContents, setGeneratedContents] = useState({});
 
-  // 각 채널의 상태 초기화
+  // 상태 초기화
   useEffect(() => {
     if (pressRelease) {
       const initial = {};
@@ -21,6 +21,10 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
         initial[ch.id] = REPURPOSE_STATUS.IDLE;
       });
       setChannelStates(initial);
+      // 첫 번째 채널 자동 선택
+      if (!activeChannel) {
+        setActiveChannel(REPURPOSE_CHANNELS[0]?.id);
+      }
     }
   }, [pressRelease]);
 
@@ -35,10 +39,19 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
     } catch (error) {
       console.error(`채널 생성 실패: ${channelId}`, error);
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.IDLE }));
+      alert(`${channelId} 생성 실패: ${error.message}`);
     }
   };
 
-  // Press release selection from contents list
+  const handleGenerateAll = async () => {
+    for (const channel of REPURPOSE_CHANNELS) {
+      if (channelStates[channel.id] !== REPURPOSE_STATUS.GENERATED) {
+        await handleGenerate(channel.id);
+      }
+    }
+  };
+
+  // 보도자료 선택 화면
   const prList = (contents || []).filter(c =>
     c.channels?.pressrelease || c.track === '-'
   );
@@ -70,45 +83,106 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
     );
   }
 
+  const doneCount = Object.values(channelStates).filter(s => s === REPURPOSE_STATUS.GENERATED || s === REPURPOSE_STATUS.EDITING).length;
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-bold">채널 재가공</h2>
-
-      {/* 원본 보도자료 요약 */}
-      <details className="bg-gray-50 rounded-lg p-4">
-        <summary className="font-semibold cursor-pointer">
-          원본 보도자료: {pressRelease.title}
-        </summary>
-        <div className="mt-3 text-sm text-gray-600 whitespace-pre-wrap">
-          {(pressRelease.body || pressRelease.draft || '').substring(0, 500)}...
-        </div>
-      </details>
-
-      {/* 5채널 카드 그리드 */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        {REPURPOSE_CHANNELS.map(channel => (
-          <ChannelCard
-            key={channel.id}
-            channel={channel}
-            status={channelStates[channel.id]}
-            isActive={activeChannel === channel.id}
-            onGenerate={() => handleGenerate(channel.id)}
-            onSelect={() => setActiveChannel(channel.id)}
-            hasContent={!!generatedContents[channel.id]}
-          />
-        ))}
+    <div className="space-y-4">
+      {/* 상단: 원본 보도자료 + 전체 생성 */}
+      <div className="flex items-center justify-between">
+        <details className="flex-1">
+          <summary className="text-sm font-medium cursor-pointer text-gray-700">
+            ▶ 원본 보도자료: {pressRelease.title}
+          </summary>
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 whitespace-pre-wrap max-h-40 overflow-y-auto">
+            {(pressRelease.body || pressRelease.draft || '').substring(0, 800)}
+            {(pressRelease.body || '').length > 800 ? '...' : ''}
+          </div>
+        </details>
+        <button
+          onClick={handleGenerateAll}
+          className="ml-4 px-4 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap"
+        >
+          전체 생성 ({doneCount}/{REPURPOSE_CHANNELS.length})
+        </button>
       </div>
 
-      {/* 선택된 채널 미리보기 */}
-      {activeChannel && generatedContents[activeChannel] && (
-        <ChannelPreview
-          channel={REPURPOSE_CHANNELS.find(c => c.id === activeChannel)}
-          content={generatedContents[activeChannel]}
-          onEdit={(updated) => {
-            setGeneratedContents(prev => ({ ...prev, [activeChannel]: updated }));
-            setChannelStates(prev => ({ ...prev, [activeChannel]: REPURPOSE_STATUS.EDITING }));
-          }}
-        />
+      {/* 채널 탭 */}
+      <div className="flex border-b border-gray-200 overflow-x-auto">
+        {REPURPOSE_CHANNELS.map(channel => {
+          const state = channelStates[channel.id];
+          const isActive = activeChannel === channel.id;
+          const isDone = state === REPURPOSE_STATUS.GENERATED || state === REPURPOSE_STATUS.EDITING;
+          const isGenerating = state === REPURPOSE_STATUS.GENERATING;
+
+          return (
+            <button
+              key={channel.id}
+              onClick={() => setActiveChannel(channel.id)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition-colors ${
+                isActive
+                  ? 'border-blue-600 text-blue-600 font-medium'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <span>{channel.icon}</span>
+              <span>{channel.name}</span>
+              {isDone && <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />}
+              {isGenerating && <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse" />}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 생성 버튼 + 미리보기 */}
+      {activeChannel && (
+        <div>
+          {/* 생성 전: 생성 버튼 */}
+          {!generatedContents[activeChannel] && (
+            <div className="text-center py-12 border border-dashed border-gray-300 rounded-xl">
+              <p className="text-sm text-gray-400 mb-4">
+                {channelStates[activeChannel] === REPURPOSE_STATUS.GENERATING
+                  ? '생성 중...'
+                  : `${REPURPOSE_CHANNELS.find(c => c.id === activeChannel)?.name} 콘텐츠를 생성하세요`
+                }
+              </p>
+              {channelStates[activeChannel] !== REPURPOSE_STATUS.GENERATING && (
+                <button
+                  onClick={() => handleGenerate(activeChannel)}
+                  className="px-6 py-2.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                >
+                  생성하기
+                </button>
+              )}
+              {channelStates[activeChannel] === REPURPOSE_STATUS.GENERATING && (
+                <div className="flex justify-center">
+                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 생성 후: 미리보기 */}
+          {generatedContents[activeChannel] && (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <button
+                  onClick={() => handleGenerate(activeChannel)}
+                  className="px-3 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  재생성
+                </button>
+              </div>
+              <ChannelPreview
+                channel={REPURPOSE_CHANNELS.find(c => c.id === activeChannel)}
+                content={generatedContents[activeChannel]}
+                onEdit={(updated) => {
+                  setGeneratedContents(prev => ({ ...prev, [activeChannel]: updated }));
+                  setChannelStates(prev => ({ ...prev, [activeChannel]: REPURPOSE_STATUS.EDITING }));
+                }}
+              />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
