@@ -110,7 +110,7 @@ function enforceFactPairs(content, source) {
   return result;
 }
 
-function openPrintView(text, title) {
+function openPrintView(text, title, images = []) {
   const clean = filterPlaceholders(text);
   const w = window.open('', '_blank');
   if (!w) return;
@@ -189,7 +189,10 @@ function openPrintView(text, title) {
   .contact-table{width:100%;border-collapse:collapse;font-size:10pt;margin-top:15px;}
   .contact-table td{padding:6px 10px;border:1px solid #ccc;}
   .contact-table .label{background:#f2f2f2;font-weight:bold;width:100px;}
-  @media print{body{margin:0;max-width:100%;}}
+  .pr-image{text-align:center;margin:20px 0;}
+  .pr-image img{max-width:100%;height:auto;border:1px solid #eee;}
+  .pr-image .caption{font-size:9pt;color:#888;margin-top:4px;}
+  @media print{body{margin:0;max-width:100%;} .pr-image img{max-width:100%;}}
 </style></head>
 <body>
   <div class="header">
@@ -198,7 +201,13 @@ function openPrintView(text, title) {
   </div>
   <div class="title">${titleText}</div>
   ${subtitle ? `<div class="subtitle">${subtitle}</div>` : ''}
-  <div class="body">${bodyParts.map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')}</div>
+  <div class="body">${bodyParts.length > 0
+    ? `<p>${bodyParts[0].replace(/\n/g, '<br>')}</p>`
+      + (images.length > 0 ? images.map((img) =>
+        `<div class="pr-image"><img src="${img.file_url}" crossorigin="anonymous">${img.caption ? `<div class="caption">${img.caption}</div>` : ''}</div>`
+      ).join('') : '')
+      + bodyParts.slice(1).map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+    : ''}</div>
   ${companyIntro ? `<hr class="divider"><div class="company-title">회사 소개</div><div class="company">${companyIntro.replace(/\n/g, '<br>')}</div>` : ''}
   <table class="contact-table">
     <tr><td class="label">회사명</td><td>BRITZMEDI Co., Ltd. (브릿츠메디 주식회사)</td></tr>
@@ -209,7 +218,21 @@ function openPrintView(text, title) {
   </table>
 </body></html>`);
   w.document.close();
-  setTimeout(() => w.print(), 500);
+
+  // 이미지가 있으면 모든 이미지 로딩 완료 후 print(), 없으면 바로 print()
+  const imgEls = w.document.querySelectorAll('.pr-image img');
+  if (imgEls.length > 0) {
+    let loaded = 0;
+    const tryPrint = () => { loaded++; if (loaded >= imgEls.length) setTimeout(() => w.print(), 300); };
+    imgEls.forEach((el) => {
+      if (el.complete) tryPrint();
+      else { el.onload = tryPrint; el.onerror = tryPrint; }
+    });
+    // 안전장치: 5초 후에도 로딩 안 되면 강제 print
+    setTimeout(() => { if (loaded < imgEls.length) w.print(); }, 5000);
+  } else {
+    setTimeout(() => w.print(), 500);
+  }
 }
 
 // =====================================================
@@ -1048,7 +1071,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
                   const sections = editedSections.pressrelease || [];
                   const text = assemblePR(sections, prFixed);
                   const titleSec = sections.find((s) => s.label === '제목');
-                  openPrintView(text, titleSec?.text?.trim() || '보도자료');
+                  openPrintView(text, titleSec?.text?.trim() || '보도자료', uploadedImages);
                 }} className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
                   PDF 다운로드
                 </button>
