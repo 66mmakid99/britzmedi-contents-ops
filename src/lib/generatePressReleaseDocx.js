@@ -220,16 +220,6 @@ export async function generatePressReleaseDocx(data) {
           children: [new TextRun({ text: 'PRESS RELEASE', font: 'Malgun Gothic', size: 24, color: '666666' })],
         }),
 
-        // ■ 발신 정보 테이블
-        new Paragraph({ spacing: { before: 200 }, children: [] }),
-        infoTable([
-          ['배포일', data.date || '2026년 X월 X일'],
-          ['발신', '브릿츠메디 주식회사'],
-          ['담당자', '이성호 CMO'],
-          ['연락처', '010-6525-9442\nsh.lee@britzmedi.co.kr'],
-          ['배포 조건', '즉시 배포 가능'],
-        ]),
-
         // ■ 제목
         new Paragraph({ spacing: { before: 400 }, children: [] }),
         new Paragraph({
@@ -245,11 +235,11 @@ export async function generatePressReleaseDocx(data) {
           children: [new TextRun({ text: data.subtitle || '', font: 'Malgun Gothic', size: 24, color: '666666' })],
         }),
 
+        // ■ 사진 (제목/부제목 바로 다음, 본문 앞)
+        ...imageParagraphs,
+
         // ■ 본문 (인용문은 본문 4번째 문단에 통합됨)
         ...bodyParagraphs,
-
-        // ■ 사진
-        ...imageParagraphs,
 
         // ■ 구분선
         new Paragraph({

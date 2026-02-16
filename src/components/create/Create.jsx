@@ -150,6 +150,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   // --- Image upload state ---
   const [uploadedImages, setUploadedImages] = useState([]); // [{id, file_name, file_url, file_path, caption, position, width, height}]
   const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState('');
 
   // Auto-recommend spokesperson when category changes
   useEffect(() => {
@@ -181,7 +182,11 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     if (!sections) return;
     // Filter out photo guide and attachment guide sections
     const filteredSections = sections.filter((s) =>
-      !(/사진\s*가이드/i.test(s.label) || /첨부파일?\s*가이드/i.test(s.label))
+      !(/사진\s*가이드/i.test(s.label) ||
+        /첨부파일?\s*가이드/i.test(s.label) ||
+        /이미지\s*가이드/i.test(s.label) ||
+        /이미지\s*생성\s*프롬프트/i.test(s.label) ||
+        /이미지\s*프롬프트/i.test(s.label))
     );
     const text = ch === 'pressrelease' ? assemblePR(filteredSections, prFixed) : assembleTextOnly(filteredSections);
     navigator.clipboard?.writeText(text);
@@ -225,6 +230,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       setSpokespersonName(SPOKESPERSONS.ceo.name);
       setUploadedImages([]);
       setImageUploading(false);
+      setImageError('');
     }
   };
 
@@ -297,7 +303,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
 
   /** STEP 0 → 1 → 2: Parse source text */
   const handleV2Parse = async () => {
-    if (!apiKey) { setShowKey(true); return; }
+    if (!apiKey) { setShowKey(true); setV2Error('Claude API Key를 먼저 입력해주세요 ↑'); return; }
     if (!sourceText.trim()) return;
     setV2Step('parsing');
     setV2Error('');
@@ -513,6 +519,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const handleImageUpload = async (files) => {
     if (!files?.length || uploadedImages.length >= 5) return;
     setImageUploading(true);
+    setImageError('');
     const remaining = 5 - uploadedImages.length;
     const toUpload = Array.from(files).slice(0, remaining);
     try {
@@ -523,6 +530,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       }
     } catch (e) {
       console.error('Image upload failed:', e);
+      setImageError(`사진 업로드 실패: ${e.message}`);
     } finally {
       setImageUploading(false);
     }
@@ -809,16 +817,26 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
 
           {/* Parse button */}
           <button
+            type="button"
             onClick={handleV2Parse}
             disabled={!sourceText.trim() || !selectedChannels.length}
-            className={`w-full py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
+            className={`w-full py-3.5 rounded-lg text-[14px] font-bold border-none transition-colors ${
               sourceText.trim() && selectedChannels.length
-                ? 'bg-accent text-white hover:bg-accent-dim'
-                : 'bg-pale text-mist cursor-not-allowed'
+                ? 'bg-accent text-white hover:bg-accent-dim cursor-pointer active:scale-[0.98]'
+                : 'bg-silver/50 text-mist cursor-not-allowed'
             }`}
           >
             소스 파싱 시작 (STEP 1)
           </button>
+          {(!sourceText.trim() || !selectedChannels.length) && (
+            <div className="text-[11px] text-danger text-center -mt-2">
+              {!sourceText.trim() && !selectedChannels.length
+                ? '⬆ 소스 텍스트를 입력하고 발행 채널을 선택하세요'
+                : !sourceText.trim()
+                  ? '⬆ 소스 텍스트를 입력하세요'
+                  : '⬆ 발행 채널을 선택하세요'}
+            </div>
+          )}
         </div>
       )}
 
@@ -986,6 +1004,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             <ImageUploader
               images={uploadedImages}
               uploading={imageUploading}
+              error={imageError}
               onUpload={handleImageUpload}
               onDelete={handleImageDelete}
               onCaptionChange={handleImageCaptionChange}
@@ -1598,7 +1617,7 @@ function LabelInput({ label, value, onChange, placeholder }) {
   );
 }
 
-function ImageUploader({ images, uploading, onUpload, onDelete, onCaptionChange, onMove }) {
+function ImageUploader({ images, uploading, error, onUpload, onDelete, onCaptionChange, onMove }) {
   const fileInputRef = { current: null };
   const handleDrop = (e) => {
     e.preventDefault();
@@ -1614,6 +1633,12 @@ function ImageUploader({ images, uploading, onUpload, onDelete, onCaptionChange,
         </div>
         <span className="text-[11px] text-steel">{images.length}/5</span>
       </div>
+
+      {error && (
+        <div className="text-[12px] text-danger bg-danger/5 rounded-lg px-3 py-2 border border-danger/20">
+          {error}
+        </div>
+      )}
 
       {/* Upload zone */}
       {images.length < 5 && (
