@@ -60,6 +60,24 @@ export function stripMarkdown(text) {
 }
 
 /**
+ * 채널명 라벨 제거: AI가 첫 줄에 "LinkedIn 포스트", "이메일 뉴스레터" 등을 넣을 때 제거
+ */
+export function stripChannelLabel(text) {
+  if (!text) return '';
+  const labels = [
+    'LinkedIn 포스트', 'LinkedIn Post', 'LinkedIn',
+    '이메일 뉴스레터', 'Email Newsletter',
+    '네이버 블로그', 'Naver Blog',
+    '카카오톡 채널', '카카오톡', 'KakaoTalk',
+    '인스타그램 포스트', '인스타그램', 'Instagram',
+    '보도자료', 'Press Release',
+  ];
+  const escaped = labels.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  // 첫 줄이 채널명 라벨(단독 또는 대괄호)이면 제거
+  return text.replace(new RegExp(`^\\s*(?:\\[?(?:${escaped})\\]?)[\\s:：—-]*\\n`, 'i'), '').trim();
+}
+
+/**
  * 섹션 라벨 제거: [제목], [본문] 등의 라벨만 제거하고 내용은 유지
  */
 function removeSectionLabels(text) {
@@ -112,8 +130,11 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   // 1단계: 마크다운 제거
   const cleaned = stripMarkdown(response);
 
-  // 2단계: 채널별 파싱
-  return parseChannelResponse(channelId, cleaned);
+  // 2단계: 채널명 라벨 제거 (AI가 첫 줄에 "LinkedIn 포스트" 등 넣을 때 대비)
+  const noLabel = stripChannelLabel(cleaned);
+
+  // 3단계: 채널별 파싱
+  return parseChannelResponse(channelId, noLabel);
 }
 
 /**
