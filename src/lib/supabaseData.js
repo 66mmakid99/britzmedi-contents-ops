@@ -11,6 +11,26 @@ export function isUUID(val) {
   return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 }
 
+/** 코드 채널ID → DB 채널명 매핑 */
+const channelToDb = {
+  'naver-blog': 'naver_blog',
+  'email-newsletter': 'email',
+  'email': 'email',
+  'naver_blog': 'naver_blog',
+  'kakao': 'kakao',
+  'instagram': 'instagram',
+  'linkedin': 'linkedin',
+};
+
+/** DB 채널명 → 코드 채널ID 역매핑 */
+const dbToChannel = {
+  'naver_blog': 'naver-blog',
+  'email': 'email-newsletter',
+  'kakao': 'kakao',
+  'instagram': 'instagram',
+  'linkedin': 'linkedin',
+};
+
 // =====================================================
 // press_releases
 // =====================================================
@@ -114,7 +134,8 @@ export async function getAllPressReleases() {
 
       pr.channels = {};
       chRows?.forEach(ch => {
-        pr.channels[ch.channel] = ch.final_text || ch.ai_draft;
+        const codeId = dbToChannel[ch.channel] || ch.channel;
+        pr.channels[codeId] = ch.final_text || ch.ai_draft;
       });
     }
 
@@ -150,6 +171,7 @@ export async function getPressReleaseById(id) {
 export async function saveChannelContent(pressReleaseId, channel, content) {
   if (!supabase || !isUUID(pressReleaseId)) return null;
   try {
+    channel = channelToDb[channel] || channel;
     const text = typeof content === 'string' ? content : (content?.body || content?.caption || JSON.stringify(content));
     const charCount = text?.length || 0;
 
@@ -231,11 +253,12 @@ export async function getChannelContents(pressReleaseId) {
 export async function getChannelContent(pressReleaseId, channel) {
   if (!supabase || !isUUID(pressReleaseId)) return null;
   try {
+    const dbChannel = channelToDb[channel] || channel;
     const { data, error } = await supabase
       .from('channel_contents')
       .select('*')
       .eq('press_release_id', pressReleaseId)
-      .eq('channel', channel)
+      .eq('channel', dbChannel)
       .single();
     if (error) throw error;
     return data;
@@ -308,10 +331,11 @@ export async function getEditHistory(contentId) {
 export async function getEditPatterns(channel) {
   if (!supabase) return [];
   try {
+    const dbChannel = channelToDb[channel] || channel;
     const { data, error } = await supabase
       .from('edit_history')
       .select('edit_type, edit_pattern, edit_reason')
-      .eq('channel', channel)
+      .eq('channel', dbChannel)
       .not('edit_pattern', 'is', null)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -346,11 +370,12 @@ export async function getAllBrandVoiceRules() {
 export async function getBrandVoiceRules(channel) {
   if (!supabase) return [];
   try {
+    const dbChannel = channelToDb[channel] || channel;
     const { data, error } = await supabase
       .from('brand_voice_rules')
       .select('*')
       .eq('is_active', true)
-      .or(`channel.eq.${channel},channel.is.null`)
+      .or(`channel.eq.${dbChannel},channel.is.null`)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
