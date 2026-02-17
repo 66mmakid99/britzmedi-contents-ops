@@ -11,6 +11,7 @@ const BUCKET = 'press-release-images';
  * @returns {{ url: string, record: object }}
  */
 export async function uploadPressReleaseImage(file, pressReleaseId, caption = '', position = 0) {
+  if (!supabase || !supabaseStorage) throw new Error('Supabase가 설정되지 않았습니다. 환경변수를 확인하세요.');
   const ext = file.name.split('.').pop();
   const timestamp = Date.now();
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -62,6 +63,7 @@ export async function uploadPressReleaseImage(file, pressReleaseId, caption = ''
  * @param {string} filePath - Storage path
  */
 export async function deletePressReleaseImage(imageId, filePath) {
+  if (!supabase || !supabaseStorage) throw new Error('Supabase가 설정되지 않았습니다.');
   // Delete from storage
   await supabaseStorage.from(BUCKET).remove([filePath]);
 
@@ -80,6 +82,7 @@ export async function deletePressReleaseImage(imageId, filePath) {
  * @returns {object[]}
  */
 export async function getPressReleaseImages(pressReleaseId) {
+  if (!supabase) throw new Error('Supabase가 설정되지 않았습니다.');
   const { data, error } = await supabase
     .from('press_release_images')
     .select('*')
