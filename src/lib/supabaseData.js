@@ -11,14 +11,21 @@ export function isUUID(val) {
   return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 }
 
-/** 코드 채널ID → DB 채널명 매핑 */
+/** 코드 채널ID → DB 채널명 매핑 (가능한 모든 변형 포함) */
 const channelToDb = {
   'naver-blog': 'naver_blog',
-  'email-newsletter': 'email',
-  'email': 'email',
   'naver_blog': 'naver_blog',
+  'naverblog': 'naver_blog',
+  'naver': 'naver_blog',
+  'blog': 'naver_blog',
+  'email-newsletter': 'email',
+  'email_newsletter': 'email',
+  'newsletter': 'email',
+  'email': 'email',
   'kakao': 'kakao',
+  'kakaotalk': 'kakao',
   'instagram': 'instagram',
+  'insta': 'instagram',
   'linkedin': 'linkedin',
 };
 
@@ -171,7 +178,12 @@ export async function getPressReleaseById(id) {
 export async function saveChannelContent(pressReleaseId, channel, content) {
   if (!supabase || !isUUID(pressReleaseId)) return null;
   try {
-    channel = channelToDb[channel] || channel;
+    console.log('[saveChannelContent] raw channel:', channel);
+    const mapped = channelToDb[channel];
+    if (!mapped) {
+      console.warn(`[saveChannelContent] 알 수 없는 채널명: "${channel}" — 매핑 없이 원래 값으로 시도`);
+    }
+    channel = mapped || channel;
     const text = typeof content === 'string' ? content : (content?.body || content?.caption || JSON.stringify(content));
     const charCount = text?.length || 0;
 
