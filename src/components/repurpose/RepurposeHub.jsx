@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { REPURPOSE_CHANNELS, REPURPOSE_STATUS } from '../../constants/channels';
 import ChannelPreview from './ChannelPreview';
 import { generateChannelContent } from '../../lib/channelGenerate';
-import { updateChannelContent } from '../../lib/supabaseData';
+import { saveChannelContent } from '../../lib/supabaseData';
 
 export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectPR }) {
   const [channelStates, setChannelStates] = useState({});
@@ -40,7 +40,7 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
       // Supabase에 채널 결과 저장 (pressRelease에 UUID id가 있을 때)
       if (pressRelease.id && typeof pressRelease.id === 'string') {
-        updateChannelContent(pressRelease.id, channelId, result).catch(() => {});
+        saveChannelContent(pressRelease.id, channelId, result).catch(() => {});
       }
     } catch (error) {
       console.error(`채널 생성 실패: ${channelId}`, error);
