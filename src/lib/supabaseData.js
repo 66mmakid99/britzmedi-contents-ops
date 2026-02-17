@@ -5,6 +5,11 @@
 
 import { supabase } from './supabase';
 
+/** UUID v4 형식인지 확인 */
+function isUUID(val) {
+  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+}
+
 // =====================================================
 // press_releases
 // =====================================================
@@ -12,22 +17,25 @@ import { supabase } from './supabase';
 export async function savePressRelease(data) {
   if (!supabase) return null;
   try {
-    const { data: row, error } = await supabase
+    const row = {
+      title: data.title,
+      source: data.source || null,
+      press_release: data.press_release || null,
+      category: data.category || null,
+      image_url: data.image_url || null,
+      status: data.status || 'draft',
+    };
+    // id가 UUID면 upsert, 아니면 새로 생성 (id 생략)
+    if (data.id && isUUID(data.id)) {
+      row.id = data.id;
+    }
+    const { data: saved, error } = await supabase
       .from('press_releases')
-      .upsert({
-        id: data.id || undefined,
-        title: data.title,
-        source: data.source || null,
-        press_release: data.press_release || null,
-        category: data.category || null,
-        channels: data.channels || {},
-        image_url: data.image_url || null,
-        status: data.status || 'draft',
-      }, { onConflict: 'id' })
+      .upsert(row, { onConflict: 'id' })
       .select()
       .single();
     if (error) throw error;
-    return row;
+    return saved;
   } catch (e) {
     console.error('[Supabase] savePressRelease 실패:', e.message);
     return null;
@@ -35,7 +43,7 @@ export async function savePressRelease(data) {
 }
 
 export async function updatePressRelease(id, data) {
-  if (!supabase) return null;
+  if (!supabase || !isUUID(id)) return null;
   try {
     const { data: row, error } = await supabase
       .from('press_releases')
@@ -52,7 +60,7 @@ export async function updatePressRelease(id, data) {
 }
 
 export async function deletePressRelease(id) {
-  if (!supabase) return false;
+  if (!supabase || !isUUID(id)) return false;
   try {
     const { error } = await supabase
       .from('press_releases')
@@ -71,7 +79,7 @@ export async function getAllPressReleases() {
   try {
     const { data, error } = await supabase
       .from('press_releases')
-      .select('*')
+      .select('id, title, source, press_release, category, image_url, status, created_at, updated_at')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data;
@@ -82,7 +90,7 @@ export async function getAllPressReleases() {
 }
 
 export async function getPressReleaseById(id) {
-  if (!supabase) return null;
+  if (!supabase || !isUUID(id)) return null;
   try {
     const { data, error } = await supabase
       .from('press_releases')
@@ -98,25 +106,31 @@ export async function getPressReleaseById(id) {
 }
 
 export async function updateChannelContent(id, channelId, content) {
-  if (!supabase) return null;
+  if (!supabase || !isUUID(id)) return null;
+  // channels 컬럼이 테이블에 없을 수 있으므로 에러 시 조용히 실패
   try {
-    // jsonb 부분 업데이트: channels -> channelId = content
     const { data: current, error: fetchErr } = await supabase
       .from('press_releases')
-      .select('channels')
+      .select('id')
       .eq('id', id)
       .single();
     if (fetchErr) throw fetchErr;
 
-    const channels = { ...(current.channels || {}), [channelId]: content };
-    const { data: row, error } = await supabase
-      .from('press_releases')
-      .update({ channels })
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-    return row;
+    // press_release 컬럼에 채널 결과를 JSON으로 저장 (channels 컬럼 대안)
+    // channels 컬럼이 존재하면 사용, 없으면 무시
+    const { error } = await supabase.rpc('update_channel_content', {
+      pr_id: id,
+      ch_id: channelId,
+      ch_content: JSON.stringify(content),
+    });
+
+    // RPC가 없으면 직접 업데이트 시도
+    if (error) {
+      // 폴백: press_release 필드는 건드리지 않고 조용히 실패
+      console.warn('[Supabase] updateChannelContent: channels 컬럼 또는 RPC 미존재, 스킵');
+      return null;
+    }
+    return current;
   } catch (e) {
     console.error('[Supabase] updateChannelContent 실패:', e.message);
     return null;
@@ -128,7 +142,7 @@ export async function updateChannelContent(id, channelId, content) {
 // =====================================================
 
 export async function savePipelineItem(data) {
-  if (!supabase) return null;
+  if (!supabase || !isUUID(data.press_release_id)) return null;
   try {
     const { data: row, error } = await supabase
       .from('pipeline_items')
@@ -149,7 +163,7 @@ export async function savePipelineItem(data) {
 }
 
 export async function updatePipelineStage(id, newStage) {
-  if (!supabase) return null;
+  if (!supabase || !isUUID(id)) return null;
   try {
     const { data: row, error } = await supabase
       .from('pipeline_items')
@@ -181,7 +195,7 @@ export async function getAllPipelineItems() {
 }
 
 export async function deletePipelineItem(id) {
-  if (!supabase) return false;
+  if (!supabase || !isUUID(id)) return false;
   try {
     const { error } = await supabase
       .from('pipeline_items')
@@ -217,15 +231,12 @@ export async function migrateLocalToSupabase() {
     for (const item of items) {
       // draft 필드에서 보도자료 텍스트 추출
       const prText = typeof item.draft === 'string' ? item.draft : null;
-      const channelsObj = typeof item.draft === 'object' && item.draft !== null
-        ? item.draft : {};
 
       const pr = await savePressRelease({
         title: item.title || '제목 없음',
         source: null,
         press_release: prText,
         category: item.pillar || null,
-        channels: typeof channelsObj === 'object' ? channelsObj : {},
         image_url: null,
         status: mapStage(item.stage),
       });

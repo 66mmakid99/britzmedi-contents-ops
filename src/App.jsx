@@ -68,15 +68,12 @@ export default function App() {
   const handleAddContent = async (newContent) => {
     // 1. Supabase에 저장
     const prText = typeof newContent.draft === 'string' ? newContent.draft : null;
-    const channelsObj = typeof newContent.draft === 'object' && newContent.draft !== null
-      ? newContent.draft : {};
 
     const saved = await savePressRelease({
       title: newContent.title,
       source: null,
       press_release: prText,
       category: newContent.pillar || null,
-      channels: typeof channelsObj === 'object' ? channelsObj : {},
       status: newContent.stage === 'ready' ? 'approved' : (newContent.stage || 'draft'),
     });
 
