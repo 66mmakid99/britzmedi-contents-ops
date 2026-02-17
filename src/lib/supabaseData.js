@@ -107,30 +107,25 @@ export async function getPressReleaseById(id) {
 
 export async function updateChannelContent(id, channelId, content) {
   if (!supabase || !isUUID(id)) return null;
-  // channels 컬럼이 테이블에 없을 수 있으므로 에러 시 조용히 실패
   try {
+    // 현재 channels 가져오기
     const { data: current, error: fetchErr } = await supabase
       .from('press_releases')
-      .select('id')
+      .select('channels')
       .eq('id', id)
       .single();
     if (fetchErr) throw fetchErr;
 
-    // press_release 컬럼에 채널 결과를 JSON으로 저장 (channels 컬럼 대안)
-    // channels 컬럼이 존재하면 사용, 없으면 무시
-    const { error } = await supabase.rpc('update_channel_content', {
-      pr_id: id,
-      ch_id: channelId,
-      ch_content: JSON.stringify(content),
-    });
-
-    // RPC가 없으면 직접 업데이트 시도
-    if (error) {
-      // 폴백: press_release 필드는 건드리지 않고 조용히 실패
-      console.warn('[Supabase] updateChannelContent: channels 컬럼 또는 RPC 미존재, 스킵');
-      return null;
-    }
-    return current;
+    // jsonb 병합 후 업데이트
+    const channels = { ...(current.channels || {}), [channelId]: content };
+    const { data: row, error } = await supabase
+      .from('press_releases')
+      .update({ channels })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return row;
   } catch (e) {
     console.error('[Supabase] updateChannelContent 실패:', e.message);
     return null;
