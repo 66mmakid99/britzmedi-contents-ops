@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CHANNEL_CONFIGS, PR_CATEGORIES } from '../../constants/prompts';
 import { SPOKESPERSONS, getRecommendedSpokesperson } from '../../constants/index';
 import { uploadPressReleaseImage, deletePressReleaseImage } from '../../lib/imageUpload';
@@ -6,6 +6,8 @@ import { parseContent, generateFromFacts, reviewV2, autoFixContent, generateQuot
 import { parseSections, assembleSections, assembleTextOnly } from '../../lib/sectionUtils';
 import { generatePressReleaseDocx } from '../../lib/generatePressReleaseDocx';
 import { saveAs } from 'file-saver';
+import { updatePressRelease, saveEditHistory } from '../../lib/supabaseData';
+import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../../lib/editUtils';
 
 // v2 step labels for the stepper
 const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수/수정', '결과'];
@@ -268,6 +270,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState(null);
 
+  // --- Phase 2-A: 검수/보정 데이터 캡처 ---
+  const v2RawDraftsRef = useRef({}); // 검수 전 초안 (채널별)
+
   // --- Spokesperson state ---
   const [spokespersonKey, setSpokespersonKey] = useState('ceo');
   const [spokespersonName, setSpokespersonName] = useState(SPOKESPERSONS.ceo.name);
@@ -346,6 +351,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       setV2Review({});
       setV2Error('');
       setV2FixReport({});
+      v2RawDraftsRef.current = {};
       setQuoteSuggestions([]);
       setQuoteLoading(false);
       setSelectedQuote(null);
@@ -473,6 +479,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         }
       }));
 
+      // Phase 2-A: 검수 전 초안 캡처
+      v2RawDraftsRef.current = { ...results };
+
       // 팩트 쌍 강제 (예: "3년" 누락 방지)
       for (const ch of Object.keys(results)) {
         results[ch] = enforceFactPairs(results[ch], sourceText);
@@ -592,6 +601,37 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       }
 
       setV2Step('results');
+
+      // Phase 2-A: edit_history 자동 저장 (백그라운드, UI 블로킹 안 함)
+      (async () => {
+        try {
+          for (const ch of selectedChannels) {
+            const rawDraft = v2RawDraftsRef.current[ch];
+            const fixResult = fixResults?.[ch];
+            const correctedText = fixResult?.fixedContent;
+            const review = reviews[ch];
+
+            if (!rawDraft || !correctedText || rawDraft === correctedText) continue;
+
+            const { editDistance, editRatio } = calculateEditMetrics(rawDraft, correctedText);
+
+            await saveEditHistory({
+              content_type: 'press_release',
+              content_id: null,
+              channel: ch === 'pressrelease' ? null : ch,
+              before_text: rawDraft,
+              after_text: correctedText,
+              edit_type: 'auto_review',
+              edit_pattern: formatFixPattern(fixResult?.fixes),
+              edit_reason: formatReviewReason(review),
+            });
+
+            console.log(`[Phase2-A] edit_history 저장 완료: ${ch} (edit_ratio: ${editRatio}, distance: ${editDistance})`);
+          }
+        } catch (e) {
+          console.error('[Phase2-A] edit_history 저장 실패:', e.message);
+        }
+      })();
     } catch (e) {
       setV2Error(`오류: ${e.message}`);
       setV2Step('confirm');
@@ -691,11 +731,26 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const handleV2Register = () => {
     if (registered) return;
     const isPR = selectedChannels.includes('pressrelease') && selectedChannels.length === 1;
+
+    // Phase 2-A: 검수 전 초안 (ai_draft)과 검수 메트릭
+    const rawDraft = v2RawDraftsRef.current.pressrelease || null;
+    const review = v2Review?.pressrelease || null;
+    const reviewMeta = review?.summary ? {
+      quality_score: 100 - ((review.summary.critical || 0) * 10 + (review.summary.warning || 0) * 3),
+      review_red: review.summary.critical || 0,
+      review_yellow: review.summary.warning || 0,
+    } : {};
+
     if (isPR) {
       // Single press release → publish
       const sections = editedSections.pressrelease || [];
       const fullText = assemblePR(sections, prFixed);
       const titleSec = sections.find((s) => s.label === '제목');
+
+      // ai_draft vs final_text 분리
+      const editMetrics = rawDraft && rawDraft !== fullText
+        ? calculateEditMetrics(rawDraft, fullText) : {};
+
       onAdd({
         id: Date.now(),
         title: titleSec?.text?.trim() || '보도자료',
@@ -705,6 +760,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         channels: { pressrelease: true },
         date: prFixed.날짜 || new Date().toISOString().split('T')[0],
         draft: fullText,
+        _aiRawDraft: rawDraft,
+        _editMetrics: editMetrics,
+        _reviewMeta: reviewMeta,
       });
     } else {
       // Multi-channel or non-PR

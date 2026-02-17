@@ -60,6 +60,8 @@ export const REPURPOSE_CHANNELS = [
 export const REPURPOSE_STATUS = {
   IDLE: 'idle',
   GENERATING: 'generating',
+  REVIEWING: 'reviewing',
+  FIXING: 'fixing',
   GENERATED: 'generated',
   EDITING: 'editing',
   APPROVED: 'approved',

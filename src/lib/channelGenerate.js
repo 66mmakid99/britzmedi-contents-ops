@@ -3,7 +3,7 @@
  * 보도자료 → Claude API → 채널별 콘텐츠
  */
 
-import { getRepurposePrompt } from '../constants/prompts';
+import { getRepurposePrompt, buildReviewPrompt, buildAutoFixPrompt } from '../constants/prompts';
 import { REPURPOSE_CHANNELS } from '../constants/channels';
 
 const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
@@ -395,4 +395,66 @@ function extractSections(text, labels) {
   }
 
   return result;
+}
+
+// =====================================================
+// Phase 2-B: 채널 콘텐츠 검수 + 자동 보정
+// =====================================================
+
+/**
+ * 채널 콘텐츠 검수 (v1 buildReviewPrompt 활용)
+ * 원본 보도자료를 소스로 사용하여 팩트 대조
+ * Returns { summary: { critical, warning }, issues: Issue[] }
+ */
+export async function reviewChannelContent(channelId, contentText, pressReleaseBody, apiKey) {
+  const prompt = buildReviewPrompt({
+    content: contentText,
+    channelId,
+    userSourceText: pressReleaseBody,
+  });
+
+  const raw = await callClaudeForChannel(prompt, apiKey, 2000);
+  const jsonMatch = raw.match(/\[[\s\S]*\]/);
+  let issues = [];
+  if (jsonMatch) {
+    try { issues = JSON.parse(jsonMatch[0]); } catch { issues = []; }
+  }
+  if (!Array.isArray(issues)) issues = [];
+
+  const critical = issues.filter(i => i.severity === 'red' || i.severity === 'critical').length;
+  const warning = issues.filter(i => i.severity === 'yellow').length;
+
+  return {
+    summary: { critical, warning },
+    issues,
+  };
+}
+
+/**
+ * 채널 콘텐츠 자동 보정 (buildAutoFixPrompt 활용)
+ * Returns { fixedContent, fixes[], needsInput[] }
+ */
+export async function autoFixChannelContent(channelId, contentText, reviewResult, pressReleaseBody, apiKey) {
+  const prompt = buildAutoFixPrompt({
+    content: contentText,
+    issues: reviewResult.issues,
+    confirmedFields: { 원본보도자료: pressReleaseBody },
+    channelId,
+    kbText: '',
+  });
+
+  const raw = await callClaudeForChannel(prompt, apiKey, 3000);
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { fixedContent: contentText, fixes: [], needsInput: [] };
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    // 보정된 텍스트에도 마크다운 제거 + 라벨 제거 적용
+    if (parsed.fixedContent) {
+      parsed.fixedContent = stripChannelLabel(stripMarkdown(parsed.fixedContent));
+    }
+    return parsed;
+  } catch {
+    return { fixedContent: contentText, fixes: [], needsInput: [] };
+  }
 }

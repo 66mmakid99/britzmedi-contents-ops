@@ -16,6 +16,7 @@ import { DEFAULT_KB_ENTRIES } from './constants/knowledgeBase';
 import {
   savePressRelease, deletePressRelease as dbDeletePR,
   getAllPressReleases, savePipelineItem, migrateLocalToSupabase,
+  updatePressRelease,
 } from './lib/supabaseData';
 
 export default function App() {
@@ -69,20 +70,36 @@ export default function App() {
     // 1. Supabase에 저장
     const prText = typeof newContent.draft === 'string' ? newContent.draft : null;
 
+    // Phase 2-A: ai_draft vs final_text 분리
+    const aiRawDraft = newContent._aiRawDraft || null;
+
     const saved = await savePressRelease({
       title: newContent.title,
       source: null,
+      ai_draft: aiRawDraft || prText,
       press_release: prText,
       category: newContent.pillar || null,
       status: newContent.stage === 'ready' ? 'approved' : (newContent.stage || 'draft'),
     });
 
-    // 2. 파이프라인에도 추가
+    // 2. 파이프라인에도 추가 + 검수 메트릭 저장
     if (saved) {
       await savePipelineItem({
         press_release_id: saved.id,
         stage: saved.status,
       });
+
+      // Phase 2-A: 검수 메트릭 업데이트 (edit_distance, quality_score 등)
+      const meta = newContent._reviewMeta || {};
+      const metrics = newContent._editMetrics || {};
+      if (meta.quality_score != null || metrics.editDistance) {
+        await updatePressRelease(saved.id, {
+          ...meta,
+          edit_distance: metrics.editDistance || null,
+          edit_ratio: metrics.editRatio || null,
+        });
+      }
+
       // Supabase ID로 교체
       newContent = { ...newContent, id: saved.id, _supabaseId: saved.id };
     }
