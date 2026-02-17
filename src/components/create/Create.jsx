@@ -555,10 +555,10 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         reviews[ch]?.issues?.some((i) => i.category !== '팩트 비율')
       );
 
+      const fixResults = {};
       if (hasIssues) {
         // Auto-fix step (4th API call)
         setV2Step('fixing');
-        const fixResults = {};
         await Promise.all(selectedChannels.map(async (ch) => {
           const review = reviews[ch];
           if (!review?.issues?.length) return;
