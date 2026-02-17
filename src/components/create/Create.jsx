@@ -201,13 +201,10 @@ function openPrintView(text, title, images = []) {
   </div>
   <div class="title">${titleText}</div>
   ${subtitle ? `<div class="subtitle">${subtitle}</div>` : ''}
-  <div class="body">${bodyParts.length > 0
-    ? `<p>${bodyParts[0].replace(/\n/g, '<br>')}</p>`
-      + (images.length > 0 ? images.map((img) =>
+  ${images.length > 0 ? images.map((img) =>
         `<div class="pr-image"><img src="${img.file_url}" crossorigin="anonymous">${img.caption ? `<div class="caption">${img.caption}</div>` : ''}</div>`
-      ).join('') : '')
-      + bodyParts.slice(1).map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
-    : ''}</div>
+      ).join('') : ''}
+  <div class="body">${bodyParts.map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')}</div>
   ${companyIntro ? `<hr class="divider"><div class="company-title">회사 소개</div><div class="company">${companyIntro.replace(/\n/g, '<br>')}</div>` : ''}
   <table class="contact-table">
     <tr><td class="label">회사명</td><td>BRITZMEDI Co., Ltd. (브릿츠메디 주식회사)</td></tr>
