@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Header from './components/layout/Header';
 import BottomNav from './components/layout/BottomNav';
 import Toast from './components/layout/Toast';
@@ -13,6 +13,10 @@ import RepurposeHub from './components/repurpose/RepurposeHub';
 import useLocalStorage from './hooks/useLocalStorage';
 import { DEMO_CONTENTS } from './constants';
 import { DEFAULT_KB_ENTRIES } from './constants/knowledgeBase';
+import {
+  savePressRelease, deletePressRelease as dbDeletePR,
+  getAllPressReleases, savePipelineItem, migrateLocalToSupabase,
+} from './lib/supabaseData';
 
 export default function App() {
   const [activePage, setActivePage] = useState('dashboard');
@@ -34,7 +38,59 @@ export default function App() {
     setToast({ msg, type });
   }, []);
 
-  const handleAddContent = (newContent) => {
+  // 초기 로딩: Supabase에서 데이터 가져오기 (실패 시 localStorage 폴백)
+  useEffect(() => {
+    (async () => {
+      // 1. localStorage → Supabase 마이그레이션 (최초 1회)
+      await migrateLocalToSupabase();
+
+      // 2. Supabase에서 전체 목록 로드
+      const rows = await getAllPressReleases();
+      if (rows && rows.length > 0) {
+        // Supabase 데이터를 기존 contents 포맷으로 변환
+        const mapped = rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          track: 'B',
+          pillar: r.category || 'PR',
+          stage: r.status || 'draft',
+          channels: r.channels || {},
+          date: r.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+          draft: r.press_release || '',
+          _supabaseId: r.id,
+        }));
+        setContents(mapped);
+      }
+      // rows가 null(Supabase 미연결) 또는 빈 배열이면 localStorage 유지
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAddContent = async (newContent) => {
+    // 1. Supabase에 저장
+    const prText = typeof newContent.draft === 'string' ? newContent.draft : null;
+    const channelsObj = typeof newContent.draft === 'object' && newContent.draft !== null
+      ? newContent.draft : {};
+
+    const saved = await savePressRelease({
+      title: newContent.title,
+      source: null,
+      press_release: prText,
+      category: newContent.pillar || null,
+      channels: typeof channelsObj === 'object' ? channelsObj : {},
+      status: newContent.stage === 'ready' ? 'approved' : (newContent.stage || 'draft'),
+    });
+
+    // 2. 파이프라인에도 추가
+    if (saved) {
+      await savePipelineItem({
+        press_release_id: saved.id,
+        stage: saved.status,
+      });
+      // Supabase ID로 교체
+      newContent = { ...newContent, id: saved.id, _supabaseId: saved.id };
+    }
+
+    // 3. localStorage 백업 (항상)
     setContents((prev) => [newContent, ...prev]);
     if (!prSourceData) {
       setActivePage('pipeline');
@@ -47,7 +103,10 @@ export default function App() {
     showToast('저장되었습니다');
   };
 
-  const handleDeleteContent = (id) => {
+  const handleDeleteContent = async (id) => {
+    // Supabase에서 삭제 (cascade로 pipeline도 삭제)
+    await dbDeletePR(id);
+    // localStorage에서도 삭제
     setContents(contents.filter((c) => c.id !== id));
     showToast('삭제되었습니다', 'info');
   };

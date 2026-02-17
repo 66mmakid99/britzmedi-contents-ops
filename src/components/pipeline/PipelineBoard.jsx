@@ -1,10 +1,11 @@
 /**
  * PipelineBoard: 칸반 스타일 파이프라인 보드
- * Phase C enhanced version using pipeline.js constants
+ * Supabase 연동 — pipeline_items + press_releases join
  */
 
 import { useState, useEffect } from 'react';
 import { PIPELINE_STAGES, PRIORITY_LEVELS } from '../../constants/pipeline';
+import { getAllPipelineItems, updatePipelineStage, deletePipelineItem } from '../../lib/supabaseData';
 
 export default function PipelineBoard() {
   const [items, setItems] = useState([]);
@@ -17,8 +18,13 @@ export default function PipelineBoard() {
   const loadPipelineItems = async () => {
     setLoading(true);
     try {
-      // TODO: Supabase에서 pipeline_items 로드
-      setItems([]);
+      const data = await getAllPipelineItems();
+      if (data) {
+        setItems(data.map(item => ({
+          ...item,
+          title: item.press_releases?.title || '제목 없음',
+        })));
+      }
     } catch (error) {
       console.error('파이프라인 로드 실패:', error);
     } finally {
@@ -27,22 +33,23 @@ export default function PipelineBoard() {
   };
 
   const moveToStage = async (itemId, newStage) => {
-    setItems(prev => prev.map(item => {
-      if (item.id === itemId) {
-        const history = [...(item.stage_history || []), {
-          from: item.stage,
-          to: newStage,
-          at: new Date().toISOString(),
-        }];
-        return { ...item, stage: newStage, stage_history: history };
-      }
-      return item;
-    }));
+    // 낙관적 업데이트
+    setItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, stage: newStage } : item
+    ));
+    // DB 업데이트
+    const updated = await updatePipelineStage(itemId, newStage);
+    if (!updated) {
+      // 실패 시 롤백
+      loadPipelineItems();
+    }
   };
 
-  const deleteItem = (itemId) => {
+  const deleteItem = async (itemId) => {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return;
     setItems(prev => prev.filter(item => item.id !== itemId));
+    const ok = await deletePipelineItem(itemId);
+    if (!ok) loadPipelineItems();
   };
 
   const getItemsByStage = (stageId) => items.filter(item => item.stage === stageId);
@@ -116,7 +123,7 @@ function PipelineCard({ item, stage, onMove, onDelete }) {
       <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
         <span>{item.content_type === 'press_release' ? '📰' : '📢'}</span>
         {item.channel && <span>{item.channel}</span>}
-        {item.scheduled_date && <span>{item.scheduled_date}</span>}
+        {item.created_at && <span>{item.created_at.split('T')[0]}</span>}
       </div>
 
       {nextStage && (
