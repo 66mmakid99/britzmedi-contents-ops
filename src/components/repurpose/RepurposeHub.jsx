@@ -116,18 +116,22 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
   // Phase 2-C: 수정 포인트 재생성
   const handleRegenerate = async (channelId) => {
+    console.log('[재생성] 클릭됨', channelId, 'state:', channelStates[channelId]);
     const beforeContent = generatedContents[channelId];
     const beforeText = beforeContent?.body || beforeContent?.caption || '';
     const editPoint = editPoints[channelId] || '';
 
     // 수정 포인트가 있으면 pressRelease에 주입
+    const prBody = pressRelease.body || pressRelease.draft || '';
+    console.log('[재생성] prBody 길이:', prBody.length, 'editPoint:', editPoint || '(없음)');
     const prWithEditPoint = editPoint
-      ? { ...pressRelease, body: (pressRelease.body || pressRelease.draft || '') + `\n\n[사용자 수정 포인트]\n${editPoint}\n위 포인트를 반드시 반영하여 수정하세요.` }
+      ? { ...pressRelease, body: prBody + `\n\n[사용자 수정 포인트]\n${editPoint}\n위 포인트를 반드시 반영하여 수정하세요.` }
       : pressRelease;
 
     setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.GENERATING }));
 
     try {
+      console.log('[재생성] API 호출 시작:', channelId);
       const result = await generateChannelContent(prWithEditPoint, channelId, { apiKey });
       const rawText = result?.body || result?.caption || '';
 
@@ -182,9 +186,10 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
       }
 
       setEditPoints(prev => ({ ...prev, [channelId]: '' }));
+      console.log('[재생성] 완료:', channelId);
     } catch (error) {
-      console.error(`채널 재생성 실패: ${channelId}`, error);
-      setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.IDLE }));
+      console.error(`[재생성] 실패:`, channelId, error);
+      setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.GENERATED }));
       alert(`${channelId} 재생성 실패: ${error.message}`);
     }
   };
