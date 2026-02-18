@@ -16,8 +16,9 @@ import { DEFAULT_KB_ENTRIES } from './constants/knowledgeBase';
 import {
   savePressRelease, deletePressRelease as dbDeletePR,
   getAllPressReleases, savePipelineItem, migrateLocalToSupabase,
-  updatePressRelease,
+  updatePressRelease, saveEditHistory,
 } from './lib/supabaseData';
+import { formatReviewReason, formatFixPattern } from './lib/editUtils';
 
 export default function App() {
   const [activePage, setActivePage] = useState('dashboard');
@@ -98,6 +99,23 @@ export default function App() {
           edit_distance: metrics.editDistance || null,
           edit_ratio: metrics.editRatio || null,
         });
+      }
+
+      // Phase 2-A: edit_history 저장 (saved.id 확보 후)
+      const fixReport = newContent._fixReport;
+      const reviewData = newContent._reviewData;
+      const rawDraft = newContent._aiRawDraft;
+      if (rawDraft && fixReport?.fixedContent && rawDraft !== fixReport.fixedContent) {
+        saveEditHistory({
+          content_type: 'press_release',
+          content_id: saved.id,
+          channel: null,
+          before_text: rawDraft,
+          after_text: fixReport.fixedContent,
+          edit_type: 'auto_review',
+          edit_pattern: formatFixPattern(fixReport.fixes),
+          edit_reason: formatReviewReason(reviewData),
+        }).catch(e => console.error('[Phase2-A] edit_history 저장 실패:', e.message));
       }
 
       // Supabase ID로 교체

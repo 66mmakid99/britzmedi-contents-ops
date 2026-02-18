@@ -601,37 +601,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       }
 
       setV2Step('results');
-
-      // Phase 2-A: edit_history 자동 저장 (백그라운드, UI 블로킹 안 함)
-      (async () => {
-        try {
-          for (const ch of selectedChannels) {
-            const rawDraft = v2RawDraftsRef.current[ch];
-            const fixResult = fixResults?.[ch];
-            const correctedText = fixResult?.fixedContent;
-            const review = reviews[ch];
-
-            if (!rawDraft || !correctedText || rawDraft === correctedText) continue;
-
-            const { editDistance, editRatio } = calculateEditMetrics(rawDraft, correctedText);
-
-            await saveEditHistory({
-              content_type: 'press_release',
-              content_id: null,
-              channel: ch === 'pressrelease' ? null : ch,
-              before_text: rawDraft,
-              after_text: correctedText,
-              edit_type: 'auto_review',
-              edit_pattern: formatFixPattern(fixResult?.fixes),
-              edit_reason: formatReviewReason(review),
-            });
-
-            console.log(`[Phase2-A] edit_history 저장 완료: ${ch} (edit_ratio: ${editRatio}, distance: ${editDistance})`);
-          }
-        } catch (e) {
-          console.error('[Phase2-A] edit_history 저장 실패:', e.message);
-        }
-      })();
+      // Phase 2-A: edit_history는 파이프라인 등록(savePressRelease) 후 saved.id로 저장
     } catch (e) {
       setV2Error(`오류: ${e.message}`);
       setV2Step('confirm');
@@ -751,6 +721,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       const editMetrics = rawDraft && rawDraft !== fullText
         ? calculateEditMetrics(rawDraft, fullText) : {};
 
+      // Phase 2-A: autoFix 보정 데이터도 전달
+      const fixReport = v2FixReport?.pressrelease || null;
+
       onAdd({
         id: Date.now(),
         title: titleSec?.text?.trim() || '보도자료',
@@ -763,6 +736,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         _aiRawDraft: rawDraft,
         _editMetrics: editMetrics,
         _reviewMeta: reviewMeta,
+        _fixReport: fixReport,
+        _reviewData: review,
       });
     } else {
       // Multi-channel or non-PR
