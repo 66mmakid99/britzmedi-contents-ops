@@ -1,5 +1,6 @@
 import { buildPrompt, buildFromPRPrompt, buildReviewPrompt, buildParsingPrompt, buildFactBasedPrompt, buildV2ReviewPrompt, buildAutoFixPrompt, buildQuoteSuggestionsPrompt, buildDocumentSummaryPrompt } from '../constants/prompts';
 import { formatKBForPrompt } from '../constants/knowledgeBase';
+import { buildContext } from './contextBuilder';
 
 const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
 
@@ -133,7 +134,12 @@ export async function generateFromFacts({ category, confirmedFields, timing, cha
   if (!apiKey) throw new Error('API 키가 필요합니다');
   const kbText = knowledgeBase ? formatKBForPrompt(knowledgeBase) : '';
   const prompt = buildFactBasedPrompt({ category, confirmedFields, timing, channelId, kbText });
-  return await callClaude(prompt, apiKey, 4000);
+
+  // Phase 3: 학습 데이터 컨텍스트 주입 (보도자료 = channel null)
+  const product = confirmedFields?.제품명 || confirmedFields?.productName || null;
+  const learningContext = await buildContext(null, category, product);
+
+  return await callClaude(prompt + learningContext, apiKey, 4000);
 }
 
 /**

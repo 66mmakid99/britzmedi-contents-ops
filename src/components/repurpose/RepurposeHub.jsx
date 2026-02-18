@@ -23,6 +23,9 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
   // Phase 2-C: 수정 포인트
   const [editPoints, setEditPoints] = useState({});
 
+  // Part 0: 재생성 로딩 표시
+  const [regenerating, setRegenerating] = useState(null);
+
   // 상태 초기화
   useEffect(() => {
     if (pressRelease) {
@@ -117,6 +120,7 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
   // Phase 2-C: 수정 포인트 재생성
   const handleRegenerate = async (channelId) => {
     console.log('[재생성] 클릭됨', channelId, 'state:', channelStates[channelId]);
+    setRegenerating(channelId);
     const beforeContent = generatedContents[channelId];
     const beforeText = beforeContent?.body || beforeContent?.caption || '';
     const editPoint = editPoints[channelId] || '';
@@ -191,6 +195,8 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
       console.error(`[재생성] 실패:`, channelId, error);
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.GENERATED }));
       alert(`${channelId} 재생성 실패: ${error.message}`);
+    } finally {
+      setRegenerating(null);
     }
   };
 
@@ -380,12 +386,20 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
                 </button>
                 <button
                   onClick={() => handleRegenerate(activeChannel)}
-                  disabled={isProcessing(channelStates[activeChannel])}
+                  disabled={regenerating !== null || isProcessing(channelStates[activeChannel])}
                   className="px-3 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
                 >
-                  재생성
+                  {regenerating === activeChannel ? '재작성 중...' : '재생성'}
                 </button>
               </div>
+
+              {/* 재생성 로딩 표시 */}
+              {regenerating === activeChannel && (
+                <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                  <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                  재작성 중... (검수 + 보정 포함, 잠시 기다려주세요)
+                </div>
+              )}
 
               {/* Phase 2-C: 수정 포인트 입력 */}
               <div>

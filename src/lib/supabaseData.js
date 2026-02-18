@@ -12,7 +12,7 @@ export function isUUID(val) {
 }
 
 /** 코드 채널ID → DB 채널명 매핑 (가능한 모든 변형 포함) */
-const channelToDb = {
+export const channelToDb = {
   'naver-blog': 'naver_blog',
   'naver_blog': 'naver_blog',
   'naverblog': 'naver_blog',

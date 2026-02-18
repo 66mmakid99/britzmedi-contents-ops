@@ -5,6 +5,8 @@
 
 import { getRepurposePrompt, buildReviewPrompt, buildAutoFixPrompt } from '../constants/prompts';
 import { REPURPOSE_CHANNELS } from '../constants/channels';
+import { buildContext } from './contextBuilder';
+import { channelToDb } from './supabaseData';
 
 const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
 
@@ -122,7 +124,11 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   const channel = REPURPOSE_CHANNELS.find(c => c.id === channelId);
   if (!channel) throw new Error(`알 수 없는 채널: ${channelId}`);
 
-  const prompt = getRepurposePrompt(channelId, pressRelease, options);
+  // Phase 3: 학습 데이터 컨텍스트 주입
+  const dbChannel = channelToDb[channelId] || channelId;
+  const learningContext = await buildContext(dbChannel, null, null);
+
+  const prompt = getRepurposePrompt(channelId, pressRelease, options) + learningContext;
   const maxTokens = (channelId === 'kakao' || channelId === 'instagram') ? 1000
     : channelId === 'naver-blog' ? 3000 : 2000;
   const response = await callClaudeForChannel(prompt, apiKey, maxTokens);
@@ -407,11 +413,15 @@ function extractSections(text, labels) {
  * Returns { summary: { critical, warning }, issues: Issue[] }
  */
 export async function reviewChannelContent(channelId, contentText, pressReleaseBody, apiKey) {
+  // Phase 3: 팩트 데이터를 검수 프롬프트에 주입 (검수 정확도 향상)
+  const dbChannel = channelToDb[channelId] || channelId;
+  const factContext = await buildContext(dbChannel, null, null);
+
   const prompt = buildReviewPrompt({
     content: contentText,
     channelId,
     userSourceText: pressReleaseBody,
-  });
+  }) + factContext;
 
   const raw = await callClaudeForChannel(prompt, apiKey, 2000);
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
