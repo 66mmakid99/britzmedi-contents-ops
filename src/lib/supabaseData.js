@@ -806,3 +806,62 @@ function mapStage(stage) {
   };
   return map[stage] || 'draft';
 }
+
+// =====================================================
+// CTA 추적
+// =====================================================
+
+/**
+ * CTA 추적 링크 생성
+ */
+export function generateCtaLink(type, channel, campaign, prId = null) {
+  const baseUrl = window.location.origin;
+  const params = new URLSearchParams({ type, channel });
+  if (campaign) params.set('campaign', campaign);
+  if (prId) params.set('pr_id', prId);
+  return `${baseUrl}/go?${params.toString()}`;
+}
+
+/**
+ * 캠페인 식별자 생성 (보도자료 제목 → slug)
+ */
+export function generateCampaignSlug(title) {
+  if (!title) return null;
+  return title
+    .replace(/[^\w가-힣\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .substring(0, 50)
+    .toLowerCase();
+}
+
+/**
+ * 채널별 CTA 텍스트 블록 생성
+ */
+export function generateCtaBlock(channel, campaign, prId) {
+  const demoLink = generateCtaLink('demo', channel, campaign, prId);
+  const consultLink = generateCtaLink('consult', channel, campaign, prId);
+
+  switch (channel) {
+    case 'email':
+      return `\n\n` +
+        `📋 데모 신청: ${demoLink}\n` +
+        `💬 제품 상담: ${consultLink}`;
+    case 'naver_blog':
+      return `\n\n` +
+        `👉 토르RF 데모 신청하기: ${demoLink}\n` +
+        `👉 제품 상담 문의하기: ${consultLink}`;
+    case 'linkedin':
+      return `\n\n` +
+        `🔗 Book a demo: ${demoLink}\n` +
+        `🔗 Product inquiry: ${consultLink}`;
+    case 'kakao':
+      return `\n\n` +
+        `▶ 데모신청: ${demoLink}\n` +
+        `▶ 제품문의: ${consultLink}`;
+    case 'instagram':
+      return `\n\n` +
+        `프로필 링크에서 데모 신청 & 제품 문의 가능!`;
+    default:
+      return `\n\n데모 신청: ${demoLink}\n제품 상담: ${consultLink}`;
+  }
+}

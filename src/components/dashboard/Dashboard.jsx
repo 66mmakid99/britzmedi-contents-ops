@@ -34,14 +34,15 @@ export default function Dashboard({ contents, onOpenContent, setActivePage }) {
     if (!supabase) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [channelData, pressData, editData, recentEdits, assetCounts] = await Promise.all([
+      const [channelData, pressData, editData, recentEdits, assetCounts, ctaData] = await Promise.all([
         loadChannelStats(),
         loadPressStats(),
         loadEditPatterns(),
         loadRecentEdits(),
         loadAssetCounts(),
+        loadCtaStats(),
       ]);
-      setData({ channelData, pressData, editData, recentEdits, assetCounts });
+      setData({ channelData, pressData, editData, recentEdits, assetCounts, ctaData });
     } catch (err) {
       console.error('[Dashboard] 데이터 로드 실패:', err);
     } finally {
@@ -102,7 +103,7 @@ export default function Dashboard({ contents, onOpenContent, setActivePage }) {
 // =====================================================
 
 function IntelligenceTab({ data, onAssetUpdate }) {
-  const { channelData, pressData, editData, recentEdits, assetCounts } = data;
+  const { channelData, pressData, editData, recentEdits, assetCounts, ctaData } = data;
 
   return (
     <div className="space-y-4">
@@ -122,6 +123,9 @@ function IntelligenceTab({ data, onAssetUpdate }) {
         <TopEditPatterns patterns={editData} onAssetUpdate={onAssetUpdate} />
         <RecentEditHistory edits={recentEdits} />
       </div>
+
+      {/* CTA 성과 */}
+      <CtaPerformance data={ctaData} />
     </div>
   );
 }
@@ -509,6 +513,82 @@ function RecentEditHistory({ edits }) {
 }
 
 // =====================================================
+// 카드 6: CTA 성과
+// =====================================================
+
+function CtaPerformance({ data }) {
+  if (!data) {
+    return (
+      <Card title="CTA 성과">
+        <EmptyMessage text="CTA 클릭 데이터가 아직 없습니다. 채널 콘텐츠를 배포하면 자동으로 추적됩니다." />
+      </Card>
+    );
+  }
+
+  const { byChannel, byCampaign, total, demoTotal, consultTotal } = data;
+  const channelEntries = Object.entries(byChannel).sort((a, b) => b[1].total - a[1].total);
+  const campaignEntries = Object.entries(byCampaign).sort((a, b) => b[1].total - a[1].total).slice(0, 3);
+  const maxChannelClicks = channelEntries.length > 0 ? channelEntries[0][1].total : 1;
+
+  return (
+    <Card title="CTA 성과">
+      {/* 총합 */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="text-center p-2 bg-snow rounded-lg">
+          <div className="text-lg font-bold text-dark">{total}</div>
+          <div className="text-[10px] text-steel">전체 클릭</div>
+        </div>
+        <div className="text-center p-2 bg-snow rounded-lg">
+          <div className="text-lg font-bold text-info">{demoTotal}</div>
+          <div className="text-[10px] text-steel">데모 신청</div>
+        </div>
+        <div className="text-center p-2 bg-snow rounded-lg">
+          <div className="text-lg font-bold text-accent">{consultTotal}</div>
+          <div className="text-[10px] text-steel">제품 상담</div>
+        </div>
+      </div>
+
+      {/* 채널별 */}
+      {channelEntries.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] font-medium text-slate mb-2">채널별 클릭</div>
+          <div className="space-y-2">
+            {channelEntries.map(([ch, counts]) => (
+              <div key={ch}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-slate">{CHANNEL_LABELS[ch] || ch}</span>
+                  <span className="text-[10px] text-steel">
+                    {counts.total}건 (데모 {counts.demo} / 상담 {counts.consult})
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-pale rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${(counts.total / maxChannelClicks) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 캠페인별 TOP 3 */}
+      {campaignEntries.length > 0 && (
+        <div>
+          <div className="text-[11px] font-medium text-slate mb-2">캠페인별 TOP 3</div>
+          <div className="space-y-1.5">
+            {campaignEntries.map(([camp, counts], i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <span className="text-slate truncate flex-1 mr-2">{camp}</span>
+                <span className="text-steel shrink-0">{counts.total}건</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// =====================================================
 // Overview Tab (기존 대시보드)
 // =====================================================
 
@@ -702,4 +782,36 @@ async function loadAssetCounts() {
     blocks: blocks.count || 0,
     prs: prs.count || 0,
   };
+}
+
+async function loadCtaStats() {
+  const { data, error } = await supabase
+    .from('cta_clicks')
+    .select('cta_type, channel, campaign, clicked_at')
+    .order('clicked_at', { ascending: false });
+
+  if (error || !data?.length) return null;
+
+  const byChannel = {};
+  let demoTotal = 0;
+  let consultTotal = 0;
+
+  data.forEach(row => {
+    const ch = row.channel;
+    if (!byChannel[ch]) byChannel[ch] = { demo: 0, consult: 0, total: 0 };
+    byChannel[ch][row.cta_type] = (byChannel[ch][row.cta_type] || 0) + 1;
+    byChannel[ch].total++;
+    if (row.cta_type === 'demo') demoTotal++;
+    else consultTotal++;
+  });
+
+  const byCampaign = {};
+  data.forEach(row => {
+    const camp = row.campaign || '(직접)';
+    if (!byCampaign[camp]) byCampaign[camp] = { demo: 0, consult: 0, total: 0 };
+    byCampaign[camp][row.cta_type] = (byCampaign[camp][row.cta_type] || 0) + 1;
+    byCampaign[camp].total++;
+  });
+
+  return { byChannel, byCampaign, total: data.length, demoTotal, consultTotal };
 }

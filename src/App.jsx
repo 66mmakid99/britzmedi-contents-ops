@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import GoRedirect from './components/GoRedirect';
 import Header from './components/layout/Header';
 import BottomNav from './components/layout/BottomNav';
 import Toast from './components/layout/Toast';
@@ -21,6 +22,11 @@ import {
 import { formatReviewReason, formatFixPattern } from './lib/editUtils';
 
 export default function App() {
+  // /go 경로: CTA 추적 리다이렉트 전용 페이지
+  if (window.location.pathname === '/go') {
+    return <GoRedirect />;
+  }
+
   const [activePage, setActivePage] = useState('dashboard');
   const [contents, setContents] = useLocalStorage('bm-contents', DEMO_CONTENTS);
   const [toast, setToast] = useState(null);
