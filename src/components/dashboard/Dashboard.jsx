@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { PIPELINE_STAGES } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { saveBrandVoiceRule } from '../../lib/supabaseData';
 
 const CHANNEL_LABELS = {
   email: '이메일 뉴스레터',
@@ -86,7 +87,7 @@ export default function Dashboard({ contents, onOpenContent, setActivePage }) {
               대시보드 데이터 로딩 중...
             </div>
           ) : data ? (
-            <IntelligenceTab data={data} />
+            <IntelligenceTab data={data} onAssetUpdate={loadDashboard} />
           ) : (
             <EmptyCard message="데이터를 불러올 수 없습니다." />
           )}
@@ -100,7 +101,7 @@ export default function Dashboard({ contents, onOpenContent, setActivePage }) {
 // Intelligence Tab
 // =====================================================
 
-function IntelligenceTab({ data }) {
+function IntelligenceTab({ data, onAssetUpdate }) {
   const { channelData, pressData, editData, recentEdits, assetCounts } = data;
 
   return (
@@ -118,7 +119,7 @@ function IntelligenceTab({ data }) {
 
       {/* 2열 그리드 — 빈출 패턴 + 최근 이력 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <TopEditPatterns patterns={editData} />
+        <TopEditPatterns patterns={editData} onAssetUpdate={onAssetUpdate} />
         <RecentEditHistory edits={recentEdits} />
       </div>
     </div>
@@ -250,7 +251,10 @@ function ReviewSummary({ stats }) {
 // 카드 3: 빈출 수정 패턴 TOP 5
 // =====================================================
 
-function TopEditPatterns({ patterns }) {
+function TopEditPatterns({ patterns, onAssetUpdate }) {
+  const [learnModal, setLearnModal] = useState(null); // { reason, count }
+  const [registered, setRegistered] = useState({}); // { reason: true }
+
   return (
     <Card title="빈출 수정 패턴 TOP 5">
       {patterns.length === 0 ? (
@@ -258,18 +262,206 @@ function TopEditPatterns({ patterns }) {
       ) : (
         <div className="space-y-2">
           {patterns.map(([reason, count], i) => (
-            <div key={i} className="flex items-start gap-2 text-xs">
+            <div key={i} className="flex items-center gap-2 text-xs">
               <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
                 count >= 3 ? 'bg-danger/15 text-danger' : 'bg-warn/15 text-warn'
               }`}>
                 {count}회
               </span>
-              <span className="text-slate leading-relaxed">{reason}</span>
+              <span className="text-slate leading-relaxed flex-1">{reason}</span>
+              {count >= 3 && (
+                registered[reason] ? (
+                  <span className="shrink-0 text-[10px] text-success font-medium">✅ 등록됨</span>
+                ) : (
+                  <button
+                    onClick={() => setLearnModal({ reason, count })}
+                    className="shrink-0 text-[10px] px-2 py-1 rounded-md bg-accent/10 text-accent-dim hover:bg-accent/20 transition-colors font-medium"
+                  >
+                    규칙으로 등록 →
+                  </button>
+                )
+              )}
             </div>
           ))}
         </div>
       )}
+
+      {learnModal && (
+        <LearnRuleModal
+          reason={learnModal.reason}
+          count={learnModal.count}
+          onClose={() => setLearnModal(null)}
+          onSaved={() => {
+            setRegistered(prev => ({ ...prev, [learnModal.reason]: true }));
+            setLearnModal(null);
+            onAssetUpdate?.();
+          }}
+        />
+      )}
     </Card>
+  );
+}
+
+// =====================================================
+// 학습 규칙 등록 모달
+// =====================================================
+
+const RULE_TYPE_OPTIONS = [
+  { value: 'banned_term', label: '🚫 금지어' },
+  { value: 'preferred_term', label: '🎯 선호어' },
+  { value: 'tone_rule', label: '🎨 톤/문체' },
+  { value: 'structure_rule', label: '📐 구조' },
+  { value: 'channel_specific', label: '📺 채널 특수' },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: '', label: '전체 채널' },
+  { value: 'email', label: '이메일 뉴스레터' },
+  { value: 'naver_blog', label: '네이버 블로그' },
+  { value: 'linkedin', label: '링크드인' },
+  { value: 'kakao', label: '카카오톡' },
+  { value: 'instagram', label: '인스타그램' },
+];
+
+function suggestRuleType(reason) {
+  const text = reason.toLowerCase();
+  if (/금지|사용.금지|용어|뷰티/.test(text)) return 'banned_term';
+  if (/출처|날조|근거.없|소스.없|불명/.test(text)) return 'banned_term';
+  if (/톤|문체|수동태|해요체|경어|격식/.test(text)) return 'tone_rule';
+  if (/구조|누락|빠짐|섹션|단락/.test(text)) return 'structure_rule';
+  return 'tone_rule';
+}
+
+function generateRuleText(reason) {
+  const clean = reason.replace(/^[🔴🟡🟢⚠️❌✅\s]+/, '').trim();
+  return clean.endsWith('것') || clean.endsWith('말 것') ? clean : `${clean} — 주의할 것`;
+}
+
+function LearnRuleModal({ reason, count, onClose, onSaved }) {
+  const [ruleType, setRuleType] = useState(suggestRuleType(reason));
+  const [channel, setChannel] = useState('');
+  const [ruleText, setRuleText] = useState(generateRuleText(reason));
+  const [badExample, setBadExample] = useState('');
+  const [goodExample, setGoodExample] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const confidence = count >= 10 ? 0.9 : count >= 5 ? 0.8 : 0.7;
+
+  async function handleSave() {
+    if (!ruleText.trim()) return;
+    setSaving(true);
+    try {
+      await saveBrandVoiceRule({
+        rule_type: ruleType,
+        channel: channel || null,
+        rule_text: ruleText.trim(),
+        bad_example: badExample.trim() || null,
+        good_example: goodExample.trim() || null,
+        source: 'learned',
+        confidence,
+        is_active: true,
+      });
+      onSaved();
+    } catch (e) {
+      console.error('[LearnRule] 저장 실패:', e);
+      alert('규칙 저장에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-xl border border-pale shadow-xl w-full max-w-md mx-4 p-5" onClick={e => e.stopPropagation()}>
+        <h3 className="text-sm font-bold text-dark mb-4">학습 규칙 등록</h3>
+
+        {/* 감지 정보 */}
+        <div className="bg-snow rounded-lg p-3 mb-4 text-xs">
+          <div className="text-steel mb-1">감지된 패턴:</div>
+          <div className="text-slate font-medium">{reason}</div>
+          <div className="text-mist mt-1">반복 횟수: {count}회 · 신뢰도: {Math.round(confidence * 100)}%</div>
+        </div>
+
+        {/* 폼 */}
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] text-steel mb-1">유형</label>
+            <select
+              value={ruleType}
+              onChange={e => setRuleType(e.target.value)}
+              className="w-full text-xs border border-pale rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              {RULE_TYPE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-steel mb-1">채널</label>
+            <select
+              value={channel}
+              onChange={e => setChannel(e.target.value)}
+              className="w-full text-xs border border-pale rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              {CHANNEL_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-steel mb-1">규칙 내용 *</label>
+            <textarea
+              value={ruleText}
+              onChange={e => setRuleText(e.target.value)}
+              rows={2}
+              className="w-full text-xs border border-pale rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] text-steel mb-1">잘못된 예시</label>
+              <input
+                type="text"
+                value={badExample}
+                onChange={e => setBadExample(e.target.value)}
+                placeholder="선택"
+                className="w-full text-xs border border-pale rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] text-steel mb-1">올바른 예시</label>
+              <input
+                type="text"
+                value={goodExample}
+                onChange={e => setGoodExample(e.target.value)}
+                placeholder="선택"
+                className="w-full text-xs border border-pale rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 버튼 */}
+        <div className="flex justify-end gap-2 mt-5">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs text-steel border border-pale rounded-lg hover:bg-snow transition-colors"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !ruleText.trim()}
+            className="px-4 py-2 text-xs text-white bg-accent rounded-lg hover:bg-accent-dim transition-colors disabled:opacity-50"
+          >
+            {saving ? '저장 중...' : '규칙 등록'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
