@@ -1,9 +1,30 @@
 /**
- * 채널 재가공 상수
- * Phase B: 보도자료 → 4개 채널 재가공
+ * V3 배포 채널 상수
+ * 7개 채널: 보도자료, 홈페이지, 뉴스레터, 네이버블로그, 링크드인, 인스타그램, 카카오톡
  */
 
 export const REPURPOSE_CHANNELS = [
+  {
+    id: 'pressrelease',
+    name: '보도자료',
+    icon: '📰',
+    format: '뉴스와이어 정형',
+    charRange: { min: 1500, max: 3000 },
+    tone: '공식 3인칭 보도문',
+    features: ['역피라미드 구조', '대표 인용문', 'Word/PDF 다운로드'],
+    outputFormat: 'text',
+    specialFlow: true,  // Create.jsx의 6단계 플로우로 처리 (RepurposeHub에서 생성하지 않음)
+  },
+  {
+    id: 'homepage',
+    name: '홈페이지',
+    icon: '🌐',
+    format: 'britzmedi.com 웹 콘텐츠',
+    charRange: { min: 500, max: 1500 },
+    tone: '글로벌 B2B 전문',
+    features: ['SEO', '구조화된 레이아웃', 'Open Graph'],
+    outputFormat: 'text',
+  },
   {
     id: 'newsletter',
     name: '이메일 뉴스레터',

@@ -3,6 +3,8 @@
 // Based on: HANDOFF-CLAUDE-CODE.md + CORRECTION.md + PRESS-RELEASE-SPEC.md
 // =====================================================
 
+import { CONTENT_TYPES } from './contentTypes';
+
 export const BRITZMEDI_CONTEXT = `## BRITZMEDI 회사 정보
 - 회사: BRITZMEDI Co., Ltd. (브릿츠메디) — 2017년 설립, 메디컬 에스테틱 디바이스 전문기업
 - 대표이사: 이신재
@@ -1855,6 +1857,46 @@ ${language === 'ko+en' ? `
 [영문 버전]
 위 한국어 포스트를 영문으로 번역. 동일한 구조([훅], [본문], [CTA], [해시태그]) 유지.
 ` : ''}`,
+
+    'homepage': `당신은 글로벌 B2B 의료기기 기업 britzmedi.com의 웹 콘텐츠 작가입니다.
+보도자료를 웹사이트에 게시할 수 있는 전문적인 기사 형태로 재작성합니다.
+
+[목적]
+britzmedi.com의 /blog 또는 /news 섹션에 게시될 웹 콘텐츠.
+검색엔진 최적화(SEO)와 글로벌 바이어 대상 브랜딩을 고려합니다.
+
+[독자 페르소나]
+- 해외 디스트리뷰터, 바이어, 투자자
+- 피부과/에스테틱 전문가
+- 회사명 검색을 통해 유입되는 방문자
+
+[톤앤매너]
+- 전문적이고 신뢰감 있는 톤
+- 3인칭 기업 시점 (~합니다, ~했습니다)
+- 글로벌 오디언스 고려 — 한국어 원문이되 영문 키워드 자연스럽게 사용
+- 보도자료보다 덜 딱딱하고, 블로그보다 더 공식적
+
+[원본 보도자료 제목]
+${prTitle}
+
+[원본 보도자료 본문]
+${prBody}
+
+${commonRules}
+
+[출력 형식]
+[제목]
+SEO를 고려한 한글 제목 (60자 이내)
+
+[본문]
+500~1500자의 웹 기사.
+첫 문단에서 핵심 내용 요약.
+이후 문단에서 배경, 의미, 전망 순서로 전개.
+숫자와 팩트를 풍부하게 활용.
+단락 구분을 명확히.
+
+[SEO 키워드]
+쉼표로 구분된 키워드 5~8개`,
   };
 
   return channelPrompts[channelId] || '';
@@ -1876,7 +1918,11 @@ export function getGeneralContentPrompt(channelId, contentSource, options = {}) 
   const typeRules = getTypeSpecificRules(type);
   const channelPrompt = getChannelPromptForType(channelId, type, sourceText, title, language);
 
-  return `${channelPrompt}\n\n${commonRules}\n\n${typeRules}`;
+  // V3: 콘텐츠 유형별 페르소나 주입
+  const persona = CONTENT_TYPES[type]?.persona;
+  const personaBlock = persona ? `\n\n[콘텐츠 페르소나/톤 가이드]\n${persona}` : '';
+
+  return `${channelPrompt}\n\n${commonRules}\n\n${typeRules}${personaBlock}`;
 }
 
 /**
@@ -2220,6 +2266,37 @@ Body (6~10줄) — 스토리/맥락 + 인사이트 + 핵심 팩트 불릿 + 전�
 한글 태그 1~2개: #의료기기 #메디컬에스테틱
 금지: #뷰티디바이스 #BeautyDevice #K뷰티 #KBeauty
 ${language === 'ko+en' ? `\n[영문 버전]\n위 한국어 포스트를 영문으로 번역. 동일한 구조 유지.` : ''}`,
+
+    'homepage': `[목적]
+britzmedi.com 웹사이트에 게시될 전문 콘텐츠.
+/blog 또는 /news 섹션 발행용.
+
+[독자 페르소나]
+· 해외 디스트리뷰터, 바이어, 투자자
+· 피부과/에스테틱 전문가
+· 회사명 검색 유입 방문자
+
+[톤앤매너]
+· 전문적이고 신뢰감 있는 톤
+· 3인칭 기업 시점 (~합니다, ~했습니다)
+· 보도자료보다 덜 딱딱하고, 블로그보다 더 공식적
+· 글로벌 오디언스 고려 — 영문 키워드 자연스럽게 사용
+
+[포맷 규칙]
+· 500~1,500자
+· 첫 문단에서 핵심 내용 요약
+· 이후 배경, 의미, 전망 순서 전개
+· 단락 구분 명확
+
+[출력 형식]
+[제목]
+SEO를 고려한 한글 제목 (60자 이내)
+
+[본문]
+웹 기사 형태. 숫자와 팩트 풍부하게 활용.
+
+[SEO 키워드]
+쉼표로 구분된 키워드 5~8개`,
   };
 
   const rules = channelRules[channelId] || '';
@@ -2241,6 +2318,8 @@ ${rules}`;
  */
 function getChannelLabel(channelId) {
   const labels = {
+    'pressrelease': '보도자료',
+    'homepage': '홈페이지',
     'newsletter': '이메일 뉴스레터',
     'naver-blog': '네이버 블로그',
     'kakao': '카카오톡 채널',

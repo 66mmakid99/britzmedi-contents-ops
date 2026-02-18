@@ -1,9 +1,11 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import GoRedirect from './components/GoRedirect';
 import Header from './components/layout/Header';
 import BottomNav from './components/layout/BottomNav';
 import Toast from './components/layout/Toast';
 import ContentModal from './components/layout/ContentModal';
+import TokenUsageBadge from './components/layout/TokenUsageBadge';
+import { SessionTracker } from './lib/tokenTracker';
 import Dashboard from './components/dashboard/Dashboard';
 import Calendar from './components/calendar/Calendar';
 import Pipeline from './components/pipeline/Pipeline';
@@ -41,6 +43,13 @@ export default function App() {
 
   // Repurpose: selected content source for channel repurposing
   const [repurposeSource, setRepurposeSource] = useState(null);
+
+  // Token usage tracking
+  const trackerRef = useRef(new SessionTracker());
+  const [tokenSummary, setTokenSummary] = useState(null);
+  const handleTokenUpdate = useCallback(() => {
+    setTokenSummary(trackerRef.current.getSummary());
+  }, []);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
@@ -169,6 +178,7 @@ export default function App() {
       date: prData.date,
       body: prData.draft || prData.body || '',
       draft: prData.draft || prData.body || '',
+      channels: prData.channels || [],
     });
     setActivePage('repurpose');
   };
@@ -229,6 +239,8 @@ export default function App() {
             knowledgeBase={kbEntries}
             onGoToRepurpose={handleGoToRepurpose}
             onGoToRepurposeGeneral={handleGoToRepurposeGeneral}
+            tracker={trackerRef.current}
+            onTokenUpdate={handleTokenUpdate}
           />
         )}
         {activePage === 'repurpose' && (
@@ -237,11 +249,14 @@ export default function App() {
             apiKey={apiKey}
             contents={contents}
             onSelectPR={(item) => setRepurposeSource({ type: 'press_release', ...item })}
+            tracker={trackerRef.current}
+            onTokenUpdate={handleTokenUpdate}
           />
         )}
         {activePage === 'knowledge' && (
-          <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} apiKey={apiKey} setApiKey={setApiKey} showToast={showToast} />
+          <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} apiKey={apiKey} setApiKey={setApiKey} showToast={showToast} tracker={trackerRef.current} onTokenUpdate={handleTokenUpdate} />
         )}
+        <TokenUsageBadge summary={tokenSummary} />
       </main>
 
       <BottomNav activePage={activePage} setActivePage={setActivePage} />

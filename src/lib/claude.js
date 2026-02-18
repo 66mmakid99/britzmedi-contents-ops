@@ -28,7 +28,9 @@ async function callClaude(prompt, apiKey, maxTokens = 4000, retries = 3) {
     }
 
     const data = await res.json();
-    return data.content?.map((b) => (b.type === 'text' ? b.text : '')).join('') || '';
+    const text = data.content?.map((b) => (b.type === 'text' ? b.text : '')).join('') || '';
+    const usage = data.usage || null;
+    return { text, usage };
   }
   throw new Error('API 과부하 상태입니다. 잠시 후 다시 시도해주세요.');
 }
@@ -36,7 +38,7 @@ async function callClaude(prompt, apiKey, maxTokens = 4000, retries = 3) {
 /**
  * Generate content for multiple channels in parallel (normal factory).
  */
-export async function generateMultiChannel({ pillarId, topicPrompt, channels, extraContext, apiKey }) {
+export async function generateMultiChannel({ pillarId, topicPrompt, channels, extraContext, apiKey, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   if (!channels.length) throw new Error('채널을 선택하세요');
 
@@ -46,7 +48,9 @@ export async function generateMultiChannel({ pillarId, topicPrompt, channels, ex
   await Promise.all(channels.map(async (channelId) => {
     try {
       const prompt = buildPrompt({ pillarId, topicPrompt, channelId, extraContext });
-      results[channelId] = await callClaude(prompt, apiKey);
+      const { text, usage } = await callClaude(prompt, apiKey);
+      tracker?.addCall(`factory-${channelId}`, usage);
+      results[channelId] = text;
     } catch (e) {
       errors[channelId] = e.message;
     }
@@ -58,7 +62,7 @@ export async function generateMultiChannel({ pillarId, topicPrompt, channels, ex
 /**
  * Generate channel content from a press release source (PR → channels).
  */
-export async function generateFromPR({ prText, channels, apiKey }) {
+export async function generateFromPR({ prText, channels, apiKey, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   if (!channels.length) throw new Error('채널을 선택하세요');
 
@@ -68,7 +72,9 @@ export async function generateFromPR({ prText, channels, apiKey }) {
   await Promise.all(channels.map(async (channelId) => {
     try {
       const prompt = buildFromPRPrompt({ prText, channelId });
-      results[channelId] = await callClaude(prompt, apiKey);
+      const { text, usage } = await callClaude(prompt, apiKey);
+      tracker?.addCall(`frompr-${channelId}`, usage);
+      results[channelId] = text;
     } catch (e) {
       errors[channelId] = e.message;
     }
@@ -81,7 +87,7 @@ export async function generateFromPR({ prText, channels, apiKey }) {
  * Review content for multiple channels in parallel.
  * Returns { channelId: Issue[], ... } where Issue = { severity, category, message, quote, section }
  */
-export async function reviewMultiChannel({ contentByChannel, channels, channelIds, userSourceText, apiKey }) {
+export async function reviewMultiChannel({ contentByChannel, channels, channelIds, userSourceText, apiKey, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
 
   const reviews = {};
@@ -91,7 +97,8 @@ export async function reviewMultiChannel({ contentByChannel, channels, channelId
     if (!content) return;
     try {
       const prompt = buildReviewPrompt({ content, channelId, userSourceText });
-      const raw = await callClaude(prompt, apiKey, 2000);
+      const { text: raw, usage } = await callClaude(prompt, apiKey, 2000);
+      tracker?.addCall(`review-multi-${channelId}`, usage);
       // Extract JSON from response (may have surrounding text)
       const jsonMatch = raw.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
@@ -116,10 +123,11 @@ export async function reviewMultiChannel({ contentByChannel, channels, channelId
  * STEP 1: Parse source text into category + structured fields.
  * Returns { category: string, fields: { key: value|null } }
  */
-export async function parseContent({ sourceText, apiKey }) {
+export async function parseContent({ sourceText, apiKey, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   const prompt = buildParsingPrompt(sourceText);
-  const raw = await callClaude(prompt, apiKey, 2000);
+  const { text: raw, usage } = await callClaude(prompt, apiKey, 2000);
+  tracker?.addCall('parse', usage);
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('파싱 결과를 해석할 수 없습니다');
   return JSON.parse(jsonMatch[0]);
@@ -130,7 +138,7 @@ export async function parseContent({ sourceText, apiKey }) {
  * Accepts knowledgeBase entries for automatic KB inclusion in prompt.
  * Returns generated text string.
  */
-export async function generateFromFacts({ category, confirmedFields, timing, channelId, apiKey, knowledgeBase }) {
+export async function generateFromFacts({ category, confirmedFields, timing, channelId, apiKey, knowledgeBase, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   const kbText = knowledgeBase ? formatKBForPrompt(knowledgeBase) : '';
   const prompt = buildFactBasedPrompt({ category, confirmedFields, timing, channelId, kbText });
@@ -139,17 +147,20 @@ export async function generateFromFacts({ category, confirmedFields, timing, cha
   const product = confirmedFields?.제품명 || confirmedFields?.productName || null;
   const learningContext = await buildContext(null, category, product);
 
-  return await callClaude(prompt + learningContext, apiKey, 4000);
+  const { text, usage } = await callClaude(prompt + learningContext, apiKey, 4000);
+  tracker?.addCall('generate', usage);
+  return text;
 }
 
 /**
  * STEP 4: Review generated content against confirmed facts.
  * Returns { summary: { critical, warning, factRatio }, issues: [...] }
  */
-export async function reviewV2({ content, confirmedFields, channelId, apiKey }) {
+export async function reviewV2({ content, confirmedFields, channelId, apiKey, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   const prompt = buildV2ReviewPrompt({ content, confirmedFields, channelId });
-  const raw = await callClaude(prompt, apiKey, 2000);
+  const { text: raw, usage } = await callClaude(prompt, apiKey, 2000);
+  tracker?.addCall('review-pr', usage);
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('검수 결과를 해석할 수 없습니다');
   return JSON.parse(jsonMatch[0]);
@@ -159,11 +170,12 @@ export async function reviewV2({ content, confirmedFields, channelId, apiKey }) 
  * STEP 4.5: Auto-fix content based on review issues.
  * Returns { fixedContent, fixes[], needsInput[] }
  */
-export async function autoFixContent({ content, issues, confirmedFields, channelId, apiKey, knowledgeBase }) {
+export async function autoFixContent({ content, issues, confirmedFields, channelId, apiKey, knowledgeBase, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   const kbText = knowledgeBase ? formatKBForPrompt(knowledgeBase) : '';
   const prompt = buildAutoFixPrompt({ content, issues, confirmedFields, channelId, kbText });
-  const raw = await callClaude(prompt, apiKey, 4000);
+  const { text: raw, usage } = await callClaude(prompt, apiKey, 4000);
+  tracker?.addCall('fix-pr', usage);
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('자동 수정 결과를 해석할 수 없습니다');
   return JSON.parse(jsonMatch[0]);
@@ -177,19 +189,21 @@ export async function autoFixContent({ content, issues, confirmedFields, channel
  * Summarize an uploaded document for KB storage.
  * Returns { title, category, summary, extractedData }
  */
-export async function summarizeDocumentForKB({ rawText, fileName, apiKey }) {
+export async function summarizeDocumentForKB({ rawText, fileName, apiKey, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   const prompt = buildDocumentSummaryPrompt(rawText, fileName);
-  const raw = await callClaude(prompt, apiKey, 2000);
+  const { text: raw, usage } = await callClaude(prompt, apiKey, 2000);
+  tracker?.addCall('kb-summarize', usage);
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('문서 요약 결과를 해석할 수 없습니다');
   return JSON.parse(jsonMatch[0]);
 }
 
-export async function generateQuoteSuggestions({ category, confirmedFields, generatedContent, timing, apiKey, speakerName, speakerTitle }) {
+export async function generateQuoteSuggestions({ category, confirmedFields, generatedContent, timing, apiKey, speakerName, speakerTitle, tracker }) {
   if (!apiKey) throw new Error('API 키가 필요합니다');
   const prompt = buildQuoteSuggestionsPrompt({ category, confirmedFields, generatedContent, timing, speakerName, speakerTitle });
-  const raw = await callClaude(prompt, apiKey, 1500);
+  const { text: raw, usage } = await callClaude(prompt, apiKey, 1500);
+  tracker?.addCall('quote', usage);
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   if (!jsonMatch) throw new Error('인용문 생성 결과를 해석할 수 없습니다');
   return JSON.parse(jsonMatch[0]);

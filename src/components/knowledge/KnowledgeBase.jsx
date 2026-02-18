@@ -56,7 +56,7 @@ const CHANNEL_OPTIONS = [
 // Main Component
 // =====================================================
 
-export default function KnowledgeBase({ entries, setEntries, apiKey, setApiKey, showToast }) {
+export default function KnowledgeBase({ entries, setEntries, apiKey, setApiKey, showToast, tracker, onTokenUpdate }) {
   const [tab, setTab] = useState('rules');
 
   const tabs = [
@@ -595,7 +595,8 @@ function LegacyKB({ entries, setEntries, apiKey, setApiKey, showToast }) {
     try {
       const { text, fileType } = await extractTextFromFile(file);
       setExtractedRawText(text); setUploadStep('summarizing');
-      const result = await summarizeDocumentForKB({ rawText: text, fileName: file.name, apiKey });
+      const result = await summarizeDocumentForKB({ rawText: text, fileName: file.name, apiKey, tracker });
+      onTokenUpdate?.();
       setForm({ title: result.title || file.name, category: result.category || form.category, content: result.summary || '' });
       setFileMetadata({ fileName: file.name, fileType, extractedData: result.extractedData || null });
       setUploadStep('done');

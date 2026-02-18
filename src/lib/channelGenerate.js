@@ -27,7 +27,9 @@ async function callClaudeForChannel(prompt, apiKey, maxTokens = 2000) {
   }
 
   const data = await res.json();
-  return data.content?.map((b) => (b.type === 'text' ? b.text : '')).join('') || '';
+  const text = data.content?.map((b) => (b.type === 'text' ? b.text : '')).join('') || '';
+  const usage = data.usage || null;
+  return { text, usage };
 }
 
 /**
@@ -73,6 +75,7 @@ export function stripChannelLabel(text) {
     '카카오톡 채널', '카카오톡', 'KakaoTalk',
     '인스타그램 포스트', '인스타그램', 'Instagram',
     '보도자료', 'Press Release',
+    '홈페이지', '홈페이지 콘텐츠', 'Homepage',
   ];
   const escaped = labels.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   // 첫 줄이 채널명 라벨(단독 또는 대괄호)이면 제거
@@ -147,7 +150,8 @@ export async function generateChannelContent(contentSource, channelId, options =
   const maxTokens = channelId === 'kakao' ? 500
     : channelId === 'instagram' ? 1000
     : channelId === 'naver-blog' ? 3000 : 2000;
-  const response = await callClaudeForChannel(prompt, apiKey, maxTokens);
+  const { text: response, usage } = await callClaudeForChannel(prompt, apiKey, maxTokens);
+  options.tracker?.addCall(`channel-${channelId}`, usage);
 
   // 1단계: 마크다운 제거
   const cleaned = stripMarkdown(response);
@@ -499,6 +503,9 @@ function appendCtaBlock(channelId, parsed, pressRelease) {
     case 'instagram':
       // 인스타: CTA 링크 없음
       break;
+    case 'homepage':
+      text += `\n\n📋 데모 신청하기: ${demoUrl}\n💬 제품 상담 문의: ${consultUrl}`;
+      break;
   }
 
   return { ...parsed, [bodyField]: text.replace(/\n{3,}/g, '\n\n').trim() };
@@ -513,7 +520,7 @@ function appendCtaBlock(channelId, parsed, pressRelease) {
  * 원본 보도자료를 소스로 사용하여 팩트 대조
  * Returns { summary: { critical, warning }, issues: Issue[] }
  */
-export async function reviewChannelContent(channelId, contentText, pressReleaseBody, apiKey, contentType) {
+export async function reviewChannelContent(channelId, contentText, pressReleaseBody, apiKey, contentType, options = {}) {
   // Phase 3: 팩트 데이터를 검수 프롬프트에 주입 (검수 정확도 향상)
   const dbChannel = channelToDb[channelId] || channelId;
   const factContext = await buildContext(dbChannel, null, null);
@@ -529,7 +536,8 @@ export async function reviewChannelContent(channelId, contentText, pressReleaseB
     userSourceText: pressReleaseBody,
   }) + typeReviewRules + factContext;
 
-  const raw = await callClaudeForChannel(prompt, apiKey, 2000);
+  const { text: raw, usage } = await callClaudeForChannel(prompt, apiKey, 2000);
+  options.tracker?.addCall(`review-${channelId}`, usage);
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
   let issues = [];
   if (jsonMatch) {
@@ -550,7 +558,7 @@ export async function reviewChannelContent(channelId, contentText, pressReleaseB
  * 채널 콘텐츠 자동 보정 (buildAutoFixPrompt 활용)
  * Returns { fixedContent, fixes[], needsInput[] }
  */
-export async function autoFixChannelContent(channelId, contentText, reviewResult, pressReleaseBody, apiKey) {
+export async function autoFixChannelContent(channelId, contentText, reviewResult, pressReleaseBody, apiKey, options = {}) {
   const prompt = buildAutoFixPrompt({
     content: contentText,
     issues: reviewResult.issues,
@@ -559,7 +567,8 @@ export async function autoFixChannelContent(channelId, contentText, reviewResult
     kbText: '',
   });
 
-  const raw = await callClaudeForChannel(prompt, apiKey, 3000);
+  const { text: raw, usage } = await callClaudeForChannel(prompt, apiKey, 3000);
+  options.tracker?.addCall(`fix-${channelId}`, usage);
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return { fixedContent: contentText, fixes: [], needsInput: [] };
 

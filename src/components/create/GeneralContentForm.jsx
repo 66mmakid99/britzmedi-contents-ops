@@ -40,7 +40,7 @@ export default function GeneralContentForm({ contentType, onBack, onSubmit }) {
     <div className="space-y-4">
       {/* 헤더 */}
       <div className="flex items-center gap-3">
-        <button onClick={onBack} className="text-steel text-sm border-none bg-transparent cursor-pointer hover:text-dark">← 유형 다시 선택</button>
+        <button onClick={onBack} className="text-steel text-sm border-none bg-transparent cursor-pointer hover:text-dark">← 성격 다시 선택</button>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-2xl">{typeConfig.icon}</span>
@@ -88,7 +88,7 @@ export default function GeneralContentForm({ contentType, onBack, onSubmit }) {
       <div className="bg-white rounded-xl p-5 border border-pale space-y-3">
         <label className="text-[13px] font-bold">발행 채널</label>
         <div className="flex flex-wrap gap-2 mt-1">
-          {REPURPOSE_CHANNELS.map(ch => {
+          {REPURPOSE_CHANNELS.filter(ch => !ch.specialFlow).map(ch => {
             const fit = typeConfig.channelFit[ch.id] || 0;
             if (fit === 0) return null;
             const isSelected = selectedChannels.includes(ch.id);

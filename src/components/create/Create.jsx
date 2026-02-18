@@ -8,7 +8,8 @@ import { generatePressReleaseDocx } from '../../lib/generatePressReleaseDocx';
 import { saveAs } from 'file-saver';
 import { updatePressRelease, saveEditHistory } from '../../lib/supabaseData';
 import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../../lib/editUtils';
-import { CONTENT_TYPES } from '../../constants/contentTypes';
+import { CONTENT_TYPES, getAutoCheckedChannels } from '../../constants/contentTypes';
+import { REPURPOSE_CHANNELS } from '../../constants/channels';
 import GeneralContentForm from './GeneralContentForm';
 
 // v2 step labels for the stepper
@@ -239,12 +240,12 @@ function openPrintView(text, title, images = []) {
 // =====================================================
 // Main Component
 // =====================================================
-export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClearPRSource, knowledgeBase, onGoToRepurpose, onGoToRepurposeGeneral }) {
+export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClearPRSource, knowledgeBase, onGoToRepurpose, onGoToRepurposeGeneral, tracker, onTokenUpdate }) {
   // --- Content type selection state ---
   const [selectedType, setSelectedType] = useState(null);
 
   // --- Shared state ---
-  const [selectedChannels, setSelectedChannels] = useState(['pressrelease']);
+  const [selectedChannels, setSelectedChannels] = useState(() => getAutoCheckedChannels('press_release'));
   const [showKey, setShowKey] = useState(false);
   const [editedSections, setEditedSections] = useState({});
   const [prFixed, setPrFixed] = useState({ ...PR_FIXED_DEFAULTS });
@@ -349,12 +350,10 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setTimeout(() => setCopyStatus(''), 2000);
   };
 
-  // Channel auto-selected as 'pressrelease' — no toggle needed
-
   // --- Reset ---
   const resetAll = () => {
     // Shared state — 초기값으로 완전 리셋
-    setSelectedChannels(['pressrelease']);
+    setSelectedChannels(getAutoCheckedChannels('press_release'));
     setShowKey(false);
     setEditedSections({});
     setPrFixed({ ...PR_FIXED_DEFAULTS });
@@ -474,7 +473,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setV2Step('parsing');
     setV2Error('');
     try {
-      const result = await parseContent({ sourceText, apiKey });
+      const result = await parseContent({ sourceText, apiKey, tracker });
+      onTokenUpdate?.();
       setParsedResult(result);
       setSelectedCategory(result.category || 'general');
       setConfirmedFields(result.fields || {});
@@ -510,7 +510,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             channelId: ch,
             apiKey,
             knowledgeBase,
+            tracker,
           });
+          onTokenUpdate?.();
         } catch (e) {
           errors[ch] = e.message;
         }
@@ -555,7 +557,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               confirmedFields,
               channelId: ch,
               apiKey,
+              tracker,
             });
+            onTokenUpdate?.();
           } catch {
             reviews[ch] = { summary: { critical: 0, warning: 0, factRatio: '검수 실패' }, issues: [] };
           }
@@ -575,7 +579,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             apiKey,
             speakerName: spokespersonName || sp?.name,
             speakerTitle: sp?.title || '대표',
+            tracker,
           });
+          onTokenUpdate?.();
           setQuoteSuggestions(Array.isArray(suggestions) ? suggestions : []);
         } catch {
           setQuoteSuggestions([]);
@@ -607,7 +613,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               channelId: ch,
               apiKey,
               knowledgeBase,
+              tracker,
             });
+            onTokenUpdate?.();
           } catch {
             fixResults[ch] = null;
           }
@@ -681,7 +689,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         apiKey,
         speakerName: spokespersonName || sp?.name,
         speakerTitle: sp?.title || '대표',
+        tracker,
       });
+      onTokenUpdate?.();
       setQuoteSuggestions(Array.isArray(suggestions) ? suggestions : []);
     } catch {
       setQuoteSuggestions([]);
@@ -809,22 +819,22 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   }
 
   // ===========================================
-  // RENDER — CONTENT TYPE SELECTION
+  // RENDER — Step 1: 성격 선택 (WHAT)
   // ===========================================
   if (!selectedType) {
     return (
       <div className="space-y-5">
         <h2 className="text-lg font-bold">콘텐츠 팩토리</h2>
-        <p className="text-[12px] text-mist">어떤 콘텐츠를 만들까요?</p>
-        <div className="grid grid-cols-4 gap-3">
+        <p className="text-[12px] text-mist">어떤 성격의 콘텐츠를 만들까요?</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {Object.entries(CONTENT_TYPES).map(([key, type]) => (
             <button
               key={key}
               onClick={() => setSelectedType(key)}
-              className="flex flex-col items-center gap-1.5 p-4 bg-white rounded-xl border border-pale hover:border-accent transition-colors cursor-pointer"
+              className="flex flex-col items-center gap-1.5 p-4 min-h-[80px] bg-white rounded-xl border border-pale hover:border-accent active:bg-snow transition-colors cursor-pointer touch-manipulation"
             >
               <span className="text-2xl">{type.icon}</span>
-              <span className="text-[11px] font-medium text-dark">{type.label}</span>
+              <span className="text-[11px] font-medium text-dark text-center leading-tight">{type.label}</span>
             </button>
           ))}
         </div>
@@ -845,7 +855,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   }
 
   // ===========================================
-  // RENDER — V2 FACTORY MODE (6-step flow) — press_release only
+  // RENDER — V2 FACTORY MODE (6-step flow) — 🤝 비즈니스/계약 + 📰 보도자료
   // ===========================================
   const v2StepIdx = V2_STEP_INDEX[v2Step] ?? 0;
   const isPRChannel = true; // Always pressrelease
@@ -853,7 +863,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   return (
     <div className="space-y-5">
       {v2Step === 'input' && (
-        <button onClick={() => setSelectedType(null)} className="text-[12px] text-steel hover:text-dark border-none bg-transparent cursor-pointer">← 유형 다시 선택</button>
+        <button onClick={() => setSelectedType(null)} className="text-[12px] text-steel hover:text-dark border-none bg-transparent cursor-pointer">← 성격 다시 선택</button>
       )}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">보도자료 제작</h2>
@@ -908,9 +918,34 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             <div className="text-[11px] text-mist text-right">{sourceText.length}자</div>
           </div>
 
-          {/* Channel info (auto-selected: pressrelease) */}
-          <div className="text-[11px] text-accent bg-accent/5 rounded-lg px-3 py-2 border border-accent/10">
-            보도자료 생성 후 "채널 콘텐츠 만들기"에서 네이버/카카오톡/LinkedIn/인스타그램으로 재가공할 수 있습니다.
+          {/* Channel selection */}
+          <div className="bg-white rounded-xl p-5 border border-pale space-y-3">
+            <label className="text-[13px] font-bold">발행 채널</label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {REPURPOSE_CHANNELS.map(ch => {
+                const fit = CONTENT_TYPES.press_release.channelFit[ch.id] || 0;
+                if (fit === 0) return null;
+                const isSelected = selectedChannels.includes(ch.id);
+                const isPR = ch.id === 'pressrelease';
+                return (
+                  <button
+                    key={ch.id}
+                    onClick={() => {
+                      if (isPR) return; // pressrelease는 항상 선택
+                      setSelectedChannels(prev =>
+                        isSelected ? prev.filter(id => id !== ch.id) : [...prev, ch.id]
+                      );
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-[12px] border cursor-pointer transition-colors ${
+                      isSelected ? 'bg-dark text-white border-dark' : 'bg-white text-steel border-pale hover:bg-snow'
+                    } ${isPR ? 'opacity-80 cursor-default' : ''}`}
+                  >
+                    {ch.icon} {ch.name} {fit === 3 ? '★' : ''}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[11px] text-mist">★ = 최적 채널 (자동 선택) · 보도자료는 항상 포함됩니다</div>
           </div>
 
           {/* Timing selection */}
@@ -1202,15 +1237,19 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
                 onClick={() => {
                   const sections = editedSections.pressrelease || [];
                   const fullText = assemblePR(sections, prFixed);
+                  const otherChannels = selectedChannels.filter(ch => ch !== 'pressrelease');
                   onGoToRepurpose({
                     title: extractPRTitle(),
                     date: prFixed.날짜 || new Date().toISOString().split('T')[0],
                     draft: fullText,
+                    channels: otherChannels,
                   });
                 }}
                 className="w-full py-3.5 rounded-lg text-[14px] font-bold bg-accent text-white border-none cursor-pointer hover:bg-accent-dim transition-colors"
               >
-                📢 채널 콘텐츠 만들기
+                📢 {selectedChannels.filter(ch => ch !== 'pressrelease').length > 0
+                  ? `${selectedChannels.filter(ch => ch !== 'pressrelease').length}개 채널 콘텐츠 만들기`
+                  : '채널 콘텐츠 만들기'}
               </button>
             )}
           </div>

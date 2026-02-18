@@ -12,7 +12,7 @@ import { saveChannelContent, saveEditHistory, channelToDb } from '../../lib/supa
 import { getPressReleaseImages } from '../../lib/imageUpload';
 import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../../lib/editUtils';
 
-export default function RepurposeHub({ contentSource, apiKey, contents, onSelectPR }) {
+export default function RepurposeHub({ contentSource, apiKey, contents, onSelectPR, tracker, onTokenUpdate }) {
   // 보도자료 여부 판별 (backward compat)
   const isPressRelease = contentSource?.type === 'press_release' || !contentSource?.type;
   const [channelStates, setChannelStates] = useState({});
@@ -33,10 +33,13 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
   const [prImages, setPrImages] = useState([]);
 
   // 비-보도자료 유형에서 선택된 채널만 표시
+  // pressrelease 채널은 Create.jsx의 6단계 플로우에서 처리 (RepurposeHub에서 제외)
   const selectedChannelIds = contentSource?.channels?.length > 0
     ? contentSource.channels
     : REPURPOSE_CHANNELS.map(ch => ch.id);
-  const visibleChannels = REPURPOSE_CHANNELS.filter(ch => selectedChannelIds.includes(ch.id));
+  const visibleChannels = REPURPOSE_CHANNELS
+    .filter(ch => selectedChannelIds.includes(ch.id))
+    .filter(ch => !ch.specialFlow);
 
   // 상태 초기화 + 이미지 로드
   useEffect(() => {
@@ -65,7 +68,8 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
 
     try {
       // STEP 1: 생성
-      const result = await generateChannelContent(contentSource, channelId, { apiKey });
+      const result = await generateChannelContent(contentSource, channelId, { apiKey, tracker });
+      onTokenUpdate?.();
       const rawText = result?.body || result?.caption || (typeof result === 'string' ? result : JSON.stringify(result));
 
       // 초안 캡처
@@ -74,7 +78,8 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
       // STEP 2: 검수
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.REVIEWING }));
       const prBody = contentSource.body || contentSource.draft || '';
-      const reviewResult = await reviewChannelContent(channelId, rawText, prBody, apiKey, contentSource.type);
+      const reviewResult = await reviewChannelContent(channelId, rawText, prBody, apiKey, contentSource.type, { tracker });
+      onTokenUpdate?.();
       setChannelReviews(prev => ({ ...prev, [channelId]: reviewResult }));
 
       let finalResult = result;
@@ -84,7 +89,8 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
       const hasIssues = reviewResult.issues?.some(i => i.severity === 'red' || i.severity === 'critical');
       if (hasIssues) {
         setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.FIXING }));
-        fixResult = await autoFixChannelContent(channelId, rawText, reviewResult, prBody, apiKey);
+        fixResult = await autoFixChannelContent(channelId, rawText, reviewResult, prBody, apiKey, { tracker });
+        onTokenUpdate?.();
 
         if (fixResult?.fixedContent && fixResult.fixedContent !== rawText) {
           // 보정된 텍스트로 결과 업데이트
@@ -155,7 +161,8 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
 
     try {
       console.log('[재생성] API 호출 시작:', channelId);
-      const result = await generateChannelContent(prWithEditPoint, channelId, { apiKey });
+      const result = await generateChannelContent(prWithEditPoint, channelId, { apiKey, tracker });
+      onTokenUpdate?.();
       const rawText = result?.body || result?.caption || '';
 
       rawDraftsRef.current[channelId] = rawText;
@@ -163,7 +170,8 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
       // 검수 + 보정
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.REVIEWING }));
       const prBody = contentSource.body || contentSource.draft || '';
-      const reviewResult = await reviewChannelContent(channelId, rawText, prBody, apiKey, contentSource.type);
+      const reviewResult = await reviewChannelContent(channelId, rawText, prBody, apiKey, contentSource.type, { tracker });
+      onTokenUpdate?.();
       setChannelReviews(prev => ({ ...prev, [channelId]: reviewResult }));
 
       let finalResult = result;
@@ -172,7 +180,8 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
       const hasIssues = reviewResult.issues?.some(i => i.severity === 'red' || i.severity === 'critical');
       if (hasIssues) {
         setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.FIXING }));
-        fixResult = await autoFixChannelContent(channelId, rawText, reviewResult, prBody, apiKey);
+        fixResult = await autoFixChannelContent(channelId, rawText, reviewResult, prBody, apiKey, { tracker });
+        onTokenUpdate?.();
         if (fixResult?.fixedContent && fixResult.fixedContent !== rawText) {
           finalResult = { ...result, body: fixResult.fixedContent };
           if (result.caption !== undefined) finalResult.caption = fixResult.fixedContent;
