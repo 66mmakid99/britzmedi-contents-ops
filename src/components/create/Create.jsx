@@ -277,6 +277,26 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const [spokespersonKey, setSpokespersonKey] = useState('ceo');
   const [spokespersonName, setSpokespersonName] = useState(SPOKESPERSONS.ceo.name);
 
+  /** 보도자료 제목 추출 (여러 소스에서 폴백) */
+  const extractPRTitle = () => {
+    const sections = editedSections.pressrelease || [];
+    // 1) 섹션에서 [제목] 찾기
+    const titleSec = sections.find((s) => s.label === '제목');
+    if (titleSec?.text?.trim()) return titleSec.text.trim();
+    // 2) v2Content 원본에서 [제목] 파싱
+    const rawContent = v2Content?.pressrelease || '';
+    const rawMatch = rawContent.match(/\[제목\]\s*\n?(.+)/);
+    if (rawMatch?.[1]?.trim()) return rawMatch[1].trim();
+    // 3) assemblePR 결과에서 파싱
+    const fullText = assemblePR(sections, prFixed);
+    const fullMatch = fullText.match(/\[제목\]\s*\n?(.+)/);
+    if (fullMatch?.[1]?.trim()) return fullMatch[1].trim();
+    // 4) 본문 첫 줄 (라벨 제외)
+    const firstLine = fullText.split('\n').find(l => l.trim() && !l.startsWith('['));
+    if (firstLine?.trim()) return firstLine.trim().slice(0, 60);
+    return '보도자료';
+  };
+
   // --- Image upload state ---
   const [uploadedImages, setUploadedImages] = useState([]); // [{id, file_name, file_url, file_path, caption, position, width, height}]
   const [imageUploading, setImageUploading] = useState(false);
@@ -729,6 +749,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
       const fullText = assemblePR(sections, prFixed);
       const titleSec = sections.find((s) => s.label === '제목');
 
+      const extractedTitle = extractPRTitle();
+
       // ai_draft vs final_text 분리
       const editMetrics = rawDraft && rawDraft !== fullText
         ? calculateEditMetrics(rawDraft, fullText) : {};
@@ -738,7 +760,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
 
       onAdd({
         id: Date.now(),
-        title: titleSec?.text?.trim() || '보도자료',
+        title: extractedTitle || '보도자료',
         track: 'B',
         pillar: 'PR',
         stage: 'published',
@@ -1112,8 +1134,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
                 <button onClick={() => {
                   const sections = editedSections.pressrelease || [];
                   const text = assemblePR(sections, prFixed);
-                  const titleSec = sections.find((s) => s.label === '제목');
-                  openPrintView(text, titleSec?.text?.trim() || '보도자료', uploadedImages);
+                  openPrintView(text, extractPRTitle(), uploadedImages);
                 }} className="flex-1 py-3 rounded-lg text-[13px] font-semibold text-slate border border-pale bg-white cursor-pointer hover:bg-snow">
                   PDF 다운로드
                 </button>
@@ -1136,10 +1157,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               <button
                 onClick={() => {
                   const sections = editedSections.pressrelease || [];
-                  const titleSec = sections.find((s) => s.label === '제목');
                   const fullText = assemblePR(sections, prFixed);
                   onGoToRepurpose({
-                    title: titleSec?.text?.trim() || '보도자료',
+                    title: extractPRTitle(),
                     date: prFixed.날짜 || new Date().toISOString().split('T')[0],
                     draft: fullText,
                   });
