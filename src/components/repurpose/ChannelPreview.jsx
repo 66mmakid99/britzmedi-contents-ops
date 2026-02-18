@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { stripMarkdown } from '../../lib/channelGenerate';
 
-export default function ChannelPreview({ channel, content, onEdit }) {
+export default function ChannelPreview({ channel, content, images, onEdit }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
   const [copied, setCopied] = useState(false);
@@ -22,6 +22,7 @@ export default function ChannelPreview({ channel, content, onEdit }) {
         break;
 
       case 'instagram':
+        // 캡션만 복사 (이미지 가이드 제외)
         text = (c.caption || c.body || '');
         if (c.hashtags?.length > 0) {
           text += '\n\n' + c.hashtags.map(t => `#${t}`).join(' ');
@@ -44,6 +45,7 @@ export default function ChannelPreview({ channel, content, onEdit }) {
       case 'naver-blog':
         text = '';
         if (c.title) text += c.title + '\n\n';
+        // [IMAGE: ...] 플레이스홀더 유지 (네이버 에디터에서 직접 삽입)
         text += c.body || '';
         if (c.tags?.length > 0) {
           text += '\n\n' + c.tags.join(', ');
@@ -76,6 +78,61 @@ export default function ChannelPreview({ channel, content, onEdit }) {
   const displayBody = stripMarkdown(content.body || '');
   const displayCaption = stripMarkdown(content.caption || content.body || '');
 
+  // 네이버 블로그: [IMAGE: ...] 위치에 실제 이미지 인라인 표시
+  const renderNaverBodyWithImages = (bodyText) => {
+    if (!images || images.length === 0) {
+      return <div className="text-sm leading-relaxed whitespace-pre-wrap">{bodyText}</div>;
+    }
+
+    const parts = bodyText.split(/(\[IMAGE:\s*.+?\])/g);
+    let imageIndex = 0;
+
+    return (
+      <div className="text-sm leading-relaxed">
+        {parts.map((part, i) => {
+          const imageMatch = part.match(/^\[IMAGE:\s*(.+?)\]$/);
+          if (imageMatch && imageIndex < images.length) {
+            const img = images[imageIndex];
+            imageIndex++;
+            return (
+              <div key={i} className="my-3">
+                <img
+                  src={img.file_url}
+                  alt={imageMatch[1]}
+                  style={{ maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }}
+                />
+                <p className="text-xs text-gray-400 mt-1">{imageMatch[1]}</p>
+              </div>
+            );
+          }
+          return <span key={i} className="whitespace-pre-wrap">{part}</span>;
+        })}
+      </div>
+    );
+  };
+
+  // 보도자료 이미지 갤러리
+  const renderImageGallery = () => {
+    if (!images || images.length === 0) return null;
+    return (
+      <div style={{ marginBottom: '16px' }}>
+        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto' }}>
+          {images.map((img, i) => (
+            <img
+              key={i}
+              src={img.file_url}
+              alt={img.caption || `보도자료 이미지 ${i + 1}`}
+              style={{ maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }}
+            />
+          ))}
+        </div>
+        <p style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+          채널에 게시할 때 위 이미지를 함께 사용하세요
+        </p>
+      </div>
+    );
+  };
+
   const renderPreview = () => {
     if (isEditing) {
       return (
@@ -106,8 +163,15 @@ export default function ChannelPreview({ channel, content, onEdit }) {
               {displayCaption}
             </div>
             {content.imageGuide && (
-              <div className="mt-3 p-3 bg-gray-50 rounded text-xs text-gray-500">
-                <span className="font-medium">📌 이미지 가이드:</span> {content.imageGuide}
+              <div style={{
+                marginTop: '12px',
+                padding: '12px',
+                background: '#FFF8E7',
+                borderRadius: '8px',
+                fontSize: '13px',
+              }}>
+                <strong>📸 이미지 가이드 (게시 참고용)</strong>
+                <div style={{ marginTop: '4px' }}>{content.imageGuide}</div>
               </div>
             )}
             {content.hashtags?.length > 0 && (
@@ -124,7 +188,6 @@ export default function ChannelPreview({ channel, content, onEdit }) {
             <div className="text-sm leading-relaxed whitespace-pre-wrap">
               {displayBody}
             </div>
-            {/* 해시태그는 본문에서 분리되어 여기서만 표시 */}
             {content.hashtags?.length > 0 && (
               <div className="mt-3 text-sm text-blue-600">
                 {content.hashtags.map(tag => `#${tag}`).join(' ')}
@@ -149,9 +212,7 @@ export default function ChannelPreview({ channel, content, onEdit }) {
             {content.title && (
               <h4 className="font-bold text-base mb-3">{content.title}</h4>
             )}
-            <div className="text-sm leading-relaxed whitespace-pre-wrap">
-              {displayBody}
-            </div>
+            {renderNaverBodyWithImages(displayBody)}
             {content.seoKeywords?.length > 0 && (
               <div className="mt-3 text-xs text-gray-400">
                 SEO: {content.seoKeywords.join(', ')}
@@ -224,6 +285,8 @@ export default function ChannelPreview({ channel, content, onEdit }) {
 
       {/* 본문 */}
       <div className="px-5 py-4">
+        {/* 보도자료 이미지 갤러리 (네이버 블로그 제외 — 네이버는 인라인) */}
+        {channel.id !== 'naver-blog' && renderImageGallery()}
         {renderPreview()}
       </div>
 

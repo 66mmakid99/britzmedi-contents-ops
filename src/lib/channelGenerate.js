@@ -413,6 +413,12 @@ function extractSections(text, labels) {
 /**
  * AI가 생성한 {DEMO_LINK}, {CONSULT_LINK} 플레이스홀더를 실제 추적 링크로 치환.
  * 플레이스홀더가 누락되었으면 본문 끝에 채널별 CTA를 강제 추가.
+ * 채널별 CTA 형식:
+ *   이메일: HTML <a> 버튼 (데모+상담)
+ *   네이버: URL 텍스트 별도 줄 (데모+상담)
+ *   링크드인: URL 별도 줄 (데모만)
+ *   카카오: URL 별도 줄 (데모만)
+ *   인스타: 텍스트 안내만 (링크 없음)
  */
 function replaceCtaPlaceholders(channelId, parsed, pressRelease) {
   const dbChannel = channelToDb[channelId] || channelId;
@@ -425,7 +431,6 @@ function replaceCtaPlaceholders(channelId, parsed, pressRelease) {
 
   // 인스타그램: 링크 불가 — 텍스트 안내만
   if (channelId === 'instagram') {
-    // 플레이스홀더 제거 (혹시 AI가 넣었을 경우)
     text = text.replace(/\{DEMO_LINK\}/g, '').replace(/\{CONSULT_LINK\}/g, '');
     if (!text.includes('프로필 링크')) {
       text += '\n\n프로필 링크에서 데모 신청 & 제품 문의 가능!';
@@ -433,52 +438,50 @@ function replaceCtaPlaceholders(channelId, parsed, pressRelease) {
     return { ...parsed, [bodyField]: text.replace(/\n{3,}/g, '\n\n').trim() };
   }
 
+  // 채널별 CTA 블록 정의
+  const ctaBlocks = {
+    'newsletter': `<a href="${demoLink}" style="display:inline-block;padding:12px 24px;background:#8B7355;color:#fff;text-decoration:none;border-radius:6px;margin-right:8px;">📋 데모 신청하기</a>\n<a href="${consultLink}" style="display:inline-block;padding:12px 24px;background:#555;color:#fff;text-decoration:none;border-radius:6px;">💬 제품 상담하기</a>`,
+    'naver-blog': `👉 데모 신청하기: ${demoLink}\n👉 제품 상담하기: ${consultLink}`,
+    'linkedin': `🔗 데모 신청하기 👇\n${demoLink}`,
+    'kakao': `▶ 자세히 보기\n${demoLink}`,
+  };
+  const ctaBlock = ctaBlocks[channelId] || `📋 데모 신청하기: ${demoLink}\n💬 제품 상담하기: ${consultLink}`;
+
   const hadPlaceholders = text.includes('{DEMO_LINK}') || text.includes('{CONSULT_LINK}');
 
   if (hadPlaceholders) {
-    // 채널별 포맷으로 치환
     switch (channelId) {
       case 'newsletter':
-        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
-        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
+        // 이메일: placeholder 포함 줄 제거 후 HTML 버튼 추가
+        text = text.replace(/.*\{DEMO_LINK\}.*\n?/g, '');
+        text = text.replace(/.*\{CONSULT_LINK\}.*\n?/g, '');
+        text = text.trim() + '\n\n' + ctaBlock;
         break;
       case 'naver-blog':
+        // 네이버: URL 텍스트로 치환 (자동 링크 변환됨)
         text = text.replace(/\{DEMO_LINK\}/g, demoLink);
         text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
         break;
       case 'linkedin':
+        // 링크드인: 데모만 치환, 상담 줄 제거
         text = text.replace(/\{DEMO_LINK\}/g, demoLink);
-        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
+        text = text.replace(/.*\{CONSULT_LINK\}.*\n?/g, '');
         break;
       case 'kakao':
+        // 카카오: 데모만 치환, 상담 줄 제거
         text = text.replace(/\{DEMO_LINK\}/g, demoLink);
-        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
+        text = text.replace(/.*\{CONSULT_LINK\}.*\n?/g, '');
         break;
       default:
         text = text.replace(/\{DEMO_LINK\}/g, demoLink);
         text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
     }
   } else {
-    // 플레이스홀더 없음 → 본문 끝에 강제 추가
-    switch (channelId) {
-      case 'newsletter':
-        text += `\n\n📋 데모 신청하기: ${demoLink}\n💬 제품 상담하기: ${consultLink}`;
-        break;
-      case 'naver-blog':
-        text += `\n\n👉 데모 신청하기: ${demoLink}\n👉 제품 상담하기: ${consultLink}`;
-        break;
-      case 'linkedin':
-        text += `\n\n🔗 데모 신청하기: ${demoLink}`;
-        break;
-      case 'kakao':
-        text += `\n\n▶ 데모신청: ${demoLink}`;
-        break;
-      default:
-        text += `\n\n📋 데모 신청하기: ${demoLink}\n💬 제품 상담하기: ${consultLink}`;
-    }
+    // 플레이스홀더 없음 → 본문 끝에 채널별 CTA 강제 추가
+    text += '\n\n' + ctaBlock;
   }
 
-  return { ...parsed, [bodyField]: text };
+  return { ...parsed, [bodyField]: text.replace(/\n{3,}/g, '\n\n').trim() };
 }
 
 // =====================================================

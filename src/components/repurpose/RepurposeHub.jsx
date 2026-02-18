@@ -8,7 +8,8 @@ import { useState, useEffect, useRef } from 'react';
 import { REPURPOSE_CHANNELS, REPURPOSE_STATUS } from '../../constants/channels';
 import ChannelPreview from './ChannelPreview';
 import { generateChannelContent, reviewChannelContent, autoFixChannelContent } from '../../lib/channelGenerate';
-import { saveChannelContent, saveEditHistory, channelToDb, generateCampaignSlug, generateCtaLink } from '../../lib/supabaseData';
+import { saveChannelContent, saveEditHistory, channelToDb } from '../../lib/supabaseData';
+import { getPressReleaseImages } from '../../lib/imageUpload';
 import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../../lib/editUtils';
 
 export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectPR }) {
@@ -26,7 +27,10 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
   // Part 0: 재생성 로딩 표시
   const [regenerating, setRegenerating] = useState(null);
 
-  // 상태 초기화
+  // Issue 3: 보도자료 이미지
+  const [prImages, setPrImages] = useState([]);
+
+  // 상태 초기화 + 이미지 로드
   useEffect(() => {
     if (pressRelease) {
       const initial = {};
@@ -36,6 +40,13 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
       setChannelStates(initial);
       if (!activeChannel) {
         setActiveChannel(REPURPOSE_CHANNELS[0]?.id);
+      }
+
+      // 보도자료 이미지 로드
+      if (pressRelease.id) {
+        getPressReleaseImages(pressRelease.id)
+          .then(images => setPrImages(images || []))
+          .catch(err => console.error('[이미지 로드 실패]', err));
       }
     }
   }, [pressRelease]);
@@ -415,14 +426,12 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
               <ChannelPreview
                 channel={REPURPOSE_CHANNELS.find(c => c.id === activeChannel)}
                 content={generatedContents[activeChannel]}
+                images={prImages}
                 onEdit={(updated) => {
                   setGeneratedContents(prev => ({ ...prev, [activeChannel]: updated }));
                   setChannelStates(prev => ({ ...prev, [activeChannel]: REPURPOSE_STATUS.EDITING }));
                 }}
               />
-
-              {/* CTA 추적 링크 미리보기 */}
-              <CtaLinkPreview channelId={activeChannel} pressRelease={pressRelease} />
             </div>
           )}
         </div>
@@ -431,24 +440,3 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
   );
 }
 
-function CtaLinkPreview({ channelId, pressRelease }) {
-  const dbChannel = channelToDb[channelId] || channelId;
-  const campaign = generateCampaignSlug(pressRelease?.id);
-  const demoLink = generateCtaLink('demo', dbChannel, campaign);
-  const consultLink = generateCtaLink('consult', dbChannel, campaign);
-
-  return (
-    <div className="mt-3 p-3 bg-snow rounded-lg border border-pale text-xs">
-      <div className="font-semibold text-slate mb-2">CTA 추적 링크</div>
-      <div className="flex items-center gap-3">
-        <a href={demoLink} target="_blank" rel="noopener noreferrer" className="text-accent-dim hover:underline font-medium">
-          📋 데모 신청하기
-        </a>
-        <span className="text-mist">|</span>
-        <a href={consultLink} target="_blank" rel="noopener noreferrer" className="text-accent-dim hover:underline font-medium">
-          💬 제품 상담하기
-        </a>
-      </div>
-    </div>
-  );
-}
