@@ -328,39 +328,51 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
 
   // --- Reset ---
   const resetAll = () => {
-    setSelectedChannels([]);
+    // Shared state — 초기값으로 완전 리셋
+    setSelectedChannels(['pressrelease']);
+    setShowKey(false);
     setEditedSections({});
     setPrFixed({ ...PR_FIXED_DEFAULTS });
     setCopyStatus('');
     setRegistered(false);
     setActiveResultTab('');
+
     if (isFromPR) {
       setLoading(false);
       setGenResults(null);
       setReviewResults({});
       setReviewing(false);
       onClearPRSource?.();
-    } else {
-      setV2Step('input');
-      setSourceText('');
-      setTiming('pre');
-      setParsedResult(null);
-      setSelectedCategory('general');
-      setConfirmedFields({});
-      setV2Content({});
-      setV2Review({});
-      setV2Error('');
-      setV2FixReport({});
-      v2RawDraftsRef.current = {};
-      setQuoteSuggestions([]);
-      setQuoteLoading(false);
-      setSelectedQuote(null);
-      setSpokespersonKey('ceo');
-      setSpokespersonName(SPOKESPERSONS.ceo.name);
-      setUploadedImages([]);
-      setImageUploading(false);
-      setImageError('');
     }
+
+    // V2 factory state — 전부 초기값
+    setV2Step('input');
+    setSourceText('');
+    setTiming('pre');
+    setParsedResult(null);
+    setSelectedCategory('general');
+    setConfirmedFields({});
+    setV2Content({});
+    setV2Review({});
+    setV2Error('');
+    setV2FixReport({});
+
+    // Phase 2-A ref
+    v2RawDraftsRef.current = {};
+
+    // Quote
+    setQuoteSuggestions([]);
+    setQuoteLoading(false);
+    setSelectedQuote(null);
+
+    // Spokesperson
+    setSpokespersonKey('ceo');
+    setSpokespersonName(SPOKESPERSONS.ceo.name);
+
+    // Image
+    setUploadedImages([]);
+    setImageUploading(false);
+    setImageError('');
   };
 
   // ===========================================
