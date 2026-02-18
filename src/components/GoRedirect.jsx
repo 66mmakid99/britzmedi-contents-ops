@@ -18,7 +18,6 @@ export default function GoRedirect() {
       const type = params.get('type') || 'consult';
       const channel = params.get('channel') || 'direct';
       const campaign = params.get('campaign') || null;
-      const prId = params.get('pr_id') || null;
 
       // Supabase에 클릭 기록 (실패해도 리다이렉트 진행)
       try {
@@ -27,7 +26,6 @@ export default function GoRedirect() {
             cta_type: type,
             channel,
             campaign,
-            press_release_id: prId,
             referrer: document.referrer || null,
             user_agent: navigator.userAgent || null,
           });

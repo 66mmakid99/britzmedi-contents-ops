@@ -79,9 +79,8 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
       // CTA 추적 블록 추가
       const dbChannel = channelToDb[channelId] || channelId;
-      const campaign = generateCampaignSlug(pressRelease.title);
-      const prId = (pressRelease.id && typeof pressRelease.id === 'string') ? pressRelease.id : null;
-      const ctaBlock = generateCtaBlock(dbChannel, campaign, prId);
+      const campaign = generateCampaignSlug(pressRelease.id);
+      const ctaBlock = generateCtaBlock(dbChannel, campaign);
       const bodyKey = finalResult.caption !== undefined ? 'caption' : 'body';
       const textWithCta = (finalResult[bodyKey] || '') + ctaBlock;
       finalResult = { ...finalResult, [bodyKey]: textWithCta, _ctaAppended: true };
@@ -172,9 +171,8 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
       // CTA 추적 블록 추가
       const dbCh = channelToDb[channelId] || channelId;
-      const campSlug = generateCampaignSlug(pressRelease.title);
-      const prIdStr = (pressRelease.id && typeof pressRelease.id === 'string') ? pressRelease.id : null;
-      const ctaBlk = generateCtaBlock(dbCh, campSlug, prIdStr);
+      const campSlug = generateCampaignSlug(pressRelease.id);
+      const ctaBlk = generateCtaBlock(dbCh, campSlug);
       const bKey = finalResult.caption !== undefined ? 'caption' : 'body';
       const withCta = (finalResult[bKey] || '') + ctaBlk;
       finalResult = { ...finalResult, [bKey]: withCta, _ctaAppended: true };
@@ -451,27 +449,21 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
 function CtaLinkPreview({ channelId, pressRelease }) {
   const dbChannel = channelToDb[channelId] || channelId;
-  const campaign = generateCampaignSlug(pressRelease?.title);
-  const prId = (pressRelease?.id && typeof pressRelease.id === 'string') ? pressRelease.id : null;
-  const demoLink = generateCtaLink('demo', dbChannel, campaign, prId);
-  const consultLink = generateCtaLink('consult', dbChannel, campaign, prId);
+  const campaign = generateCampaignSlug(pressRelease?.id);
+  const demoLink = generateCtaLink('demo', dbChannel, campaign);
+  const consultLink = generateCtaLink('consult', dbChannel, campaign);
 
   return (
     <div className="mt-3 p-3 bg-snow rounded-lg border border-pale text-xs">
       <div className="font-semibold text-slate mb-2">CTA 추적 링크</div>
-      <div className="space-y-1">
-        <div className="flex items-start gap-2">
-          <span className="text-steel shrink-0">데모 신청:</span>
-          <a href={demoLink} target="_blank" rel="noopener noreferrer" className="text-accent-dim break-all hover:underline">
-            {demoLink}
-          </a>
-        </div>
-        <div className="flex items-start gap-2">
-          <span className="text-steel shrink-0">제품 상담:</span>
-          <a href={consultLink} target="_blank" rel="noopener noreferrer" className="text-accent-dim break-all hover:underline">
-            {consultLink}
-          </a>
-        </div>
+      <div className="flex items-center gap-3">
+        <a href={demoLink} target="_blank" rel="noopener noreferrer" className="text-accent-dim hover:underline font-medium">
+          📋 데모 신청하기
+        </a>
+        <span className="text-mist">|</span>
+        <a href={consultLink} target="_blank" rel="noopener noreferrer" className="text-accent-dim hover:underline font-medium">
+          💬 제품 상담하기
+        </a>
       </div>
     </div>
   );
