@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { REPURPOSE_CHANNELS, REPURPOSE_STATUS } from '../../constants/channels';
 import ChannelPreview from './ChannelPreview';
 import { generateChannelContent, reviewChannelContent, autoFixChannelContent } from '../../lib/channelGenerate';
-import { saveChannelContent, saveEditHistory, channelToDb, generateCampaignSlug, generateCtaBlock, generateCtaLink } from '../../lib/supabaseData';
+import { saveChannelContent, saveEditHistory, channelToDb, generateCampaignSlug, generateCtaLink } from '../../lib/supabaseData';
 import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../../lib/editUtils';
 
 export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectPR }) {
@@ -76,14 +76,6 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
           finalResult.charCount = fixResult.fixedContent.length;
         }
       }
-
-      // CTA 추적 블록 추가
-      const dbChannel = channelToDb[channelId] || channelId;
-      const campaign = generateCampaignSlug(pressRelease.id);
-      const ctaBlock = generateCtaBlock(dbChannel, campaign);
-      const bodyKey = finalResult.caption !== undefined ? 'caption' : 'body';
-      const textWithCta = (finalResult[bodyKey] || '') + ctaBlock;
-      finalResult = { ...finalResult, [bodyKey]: textWithCta, _ctaAppended: true };
 
       setGeneratedContents(prev => ({ ...prev, [channelId]: finalResult }));
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.GENERATED }));
@@ -168,14 +160,6 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
           finalResult.charCount = fixResult.fixedContent.length;
         }
       }
-
-      // CTA 추적 블록 추가
-      const dbCh = channelToDb[channelId] || channelId;
-      const campSlug = generateCampaignSlug(pressRelease.id);
-      const ctaBlk = generateCtaBlock(dbCh, campSlug);
-      const bKey = finalResult.caption !== undefined ? 'caption' : 'body';
-      const withCta = (finalResult[bKey] || '') + ctaBlk;
-      finalResult = { ...finalResult, [bKey]: withCta, _ctaAppended: true };
 
       setGeneratedContents(prev => ({ ...prev, [channelId]: finalResult }));
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.GENERATED }));

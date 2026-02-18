@@ -6,7 +6,7 @@
 import { getRepurposePrompt, buildReviewPrompt, buildAutoFixPrompt } from '../constants/prompts';
 import { REPURPOSE_CHANNELS } from '../constants/channels';
 import { buildContext } from './contextBuilder';
-import { channelToDb } from './supabaseData';
+import { channelToDb, generateCtaLink, generateCampaignSlug } from './supabaseData';
 
 const API_URL = 'https://britzmedi-api-proxy.mmakid.workers.dev';
 
@@ -140,7 +140,10 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   const noLabel = stripChannelLabel(cleaned);
 
   // 3단계: 채널별 파싱
-  return parseChannelResponse(channelId, noLabel);
+  const parsed = parseChannelResponse(channelId, noLabel);
+
+  // 4단계: CTA 플레이스홀더 치환
+  return replaceCtaPlaceholders(channelId, parsed, pressRelease);
 }
 
 /**
@@ -401,6 +404,81 @@ function extractSections(text, labels) {
   }
 
   return result;
+}
+
+// =====================================================
+// CTA 플레이스홀더 치환
+// =====================================================
+
+/**
+ * AI가 생성한 {DEMO_LINK}, {CONSULT_LINK} 플레이스홀더를 실제 추적 링크로 치환.
+ * 플레이스홀더가 누락되었으면 본문 끝에 채널별 CTA를 강제 추가.
+ */
+function replaceCtaPlaceholders(channelId, parsed, pressRelease) {
+  const dbChannel = channelToDb[channelId] || channelId;
+  const campaign = generateCampaignSlug(pressRelease?.id);
+  const demoLink = generateCtaLink('demo', dbChannel, campaign);
+  const consultLink = generateCtaLink('consult', dbChannel, campaign);
+
+  const bodyField = parsed.caption !== undefined ? 'caption' : 'body';
+  let text = parsed[bodyField] || '';
+
+  // 인스타그램: 링크 불가 — 텍스트 안내만
+  if (channelId === 'instagram') {
+    // 플레이스홀더 제거 (혹시 AI가 넣었을 경우)
+    text = text.replace(/\{DEMO_LINK\}/g, '').replace(/\{CONSULT_LINK\}/g, '');
+    if (!text.includes('프로필 링크')) {
+      text += '\n\n프로필 링크에서 데모 신청 & 제품 문의 가능!';
+    }
+    return { ...parsed, [bodyField]: text.replace(/\n{3,}/g, '\n\n').trim() };
+  }
+
+  const hadPlaceholders = text.includes('{DEMO_LINK}') || text.includes('{CONSULT_LINK}');
+
+  if (hadPlaceholders) {
+    // 채널별 포맷으로 치환
+    switch (channelId) {
+      case 'newsletter':
+        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
+        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
+        break;
+      case 'naver-blog':
+        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
+        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
+        break;
+      case 'linkedin':
+        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
+        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
+        break;
+      case 'kakao':
+        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
+        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
+        break;
+      default:
+        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
+        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
+    }
+  } else {
+    // 플레이스홀더 없음 → 본문 끝에 강제 추가
+    switch (channelId) {
+      case 'newsletter':
+        text += `\n\n📋 데모 신청하기: ${demoLink}\n💬 제품 상담하기: ${consultLink}`;
+        break;
+      case 'naver-blog':
+        text += `\n\n👉 데모 신청하기: ${demoLink}\n👉 제품 상담하기: ${consultLink}`;
+        break;
+      case 'linkedin':
+        text += `\n\n🔗 데모 신청하기: ${demoLink}`;
+        break;
+      case 'kakao':
+        text += `\n\n▶ 데모신청: ${demoLink}`;
+        break;
+      default:
+        text += `\n\n📋 데모 신청하기: ${demoLink}\n💬 제품 상담하기: ${consultLink}`;
+    }
+  }
+
+  return { ...parsed, [bodyField]: text };
 }
 
 // =====================================================
