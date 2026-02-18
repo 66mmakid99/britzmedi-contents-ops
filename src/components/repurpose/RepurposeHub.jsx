@@ -12,7 +12,9 @@ import { saveChannelContent, saveEditHistory, channelToDb } from '../../lib/supa
 import { getPressReleaseImages } from '../../lib/imageUpload';
 import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../../lib/editUtils';
 
-export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectPR }) {
+export default function RepurposeHub({ contentSource, apiKey, contents, onSelectPR }) {
+  // 보도자료 여부 판별 (backward compat)
+  const isPressRelease = contentSource?.type === 'press_release' || !contentSource?.type;
   const [channelStates, setChannelStates] = useState({});
   const [activeChannel, setActiveChannel] = useState(null);
   const [generatedContents, setGeneratedContents] = useState({});
@@ -30,26 +32,32 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
   // Issue 3: 보도자료 이미지
   const [prImages, setPrImages] = useState([]);
 
+  // 비-보도자료 유형에서 선택된 채널만 표시
+  const selectedChannelIds = contentSource?.channels?.length > 0
+    ? contentSource.channels
+    : REPURPOSE_CHANNELS.map(ch => ch.id);
+  const visibleChannels = REPURPOSE_CHANNELS.filter(ch => selectedChannelIds.includes(ch.id));
+
   // 상태 초기화 + 이미지 로드
   useEffect(() => {
-    if (pressRelease) {
+    if (contentSource) {
       const initial = {};
-      REPURPOSE_CHANNELS.forEach(ch => {
+      visibleChannels.forEach(ch => {
         initial[ch.id] = REPURPOSE_STATUS.IDLE;
       });
       setChannelStates(initial);
-      if (!activeChannel) {
-        setActiveChannel(REPURPOSE_CHANNELS[0]?.id);
+      if (!activeChannel || !selectedChannelIds.includes(activeChannel)) {
+        setActiveChannel(visibleChannels[0]?.id);
       }
 
-      // 보도자료 이미지 로드
-      if (pressRelease.id) {
-        getPressReleaseImages(pressRelease.id)
+      // 보도자료 이미지 로드 (press_release만)
+      if (isPressRelease && contentSource.id) {
+        getPressReleaseImages(contentSource.id)
           .then(images => setPrImages(images || []))
           .catch(err => console.error('[이미지 로드 실패]', err));
       }
     }
-  }, [pressRelease]);
+  }, [contentSource]);
 
   const handleGenerate = async (channelId) => {
     setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.GENERATING }));
@@ -57,7 +65,7 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
     try {
       // STEP 1: 생성
-      const result = await generateChannelContent(pressRelease, channelId, { apiKey });
+      const result = await generateChannelContent(contentSource, channelId, { apiKey });
       const rawText = result?.body || result?.caption || (typeof result === 'string' ? result : JSON.stringify(result));
 
       // 초안 캡처
@@ -65,8 +73,8 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
       // STEP 2: 검수
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.REVIEWING }));
-      const prBody = pressRelease.body || pressRelease.draft || '';
-      const reviewResult = await reviewChannelContent(channelId, rawText, prBody, apiKey);
+      const prBody = contentSource.body || contentSource.draft || '';
+      const reviewResult = await reviewChannelContent(channelId, rawText, prBody, apiKey, contentSource.type);
       setChannelReviews(prev => ({ ...prev, [channelId]: reviewResult }));
 
       let finalResult = result;
@@ -92,11 +100,11 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.GENERATED }));
 
       // Supabase 저장 (백그라운드)
-      if (pressRelease.id && typeof pressRelease.id === 'string') {
+      if (contentSource.id && typeof contentSource.id === 'string') {
         (async () => {
           try {
             // ai_draft로 초안 저장
-            const savedRow = await saveChannelContent(pressRelease.id, channelId, rawText);
+            const savedRow = await saveChannelContent(contentSource.id, channelId, rawText);
 
             // 보정이 있었으면 edit_history 저장
             const finalText = fixResult?.fixedContent || rawText;
@@ -136,12 +144,12 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
     const beforeText = beforeContent?.body || beforeContent?.caption || '';
     const editPoint = editPoints[channelId] || '';
 
-    // 수정 포인트가 있으면 pressRelease에 주입
-    const prBody = pressRelease.body || pressRelease.draft || '';
+    // 수정 포인트가 있으면 contentSource에 주입
+    const prBody = contentSource.body || contentSource.draft || '';
     console.log('[재생성] prBody 길이:', prBody.length, 'editPoint:', editPoint || '(없음)');
     const prWithEditPoint = editPoint
-      ? { ...pressRelease, body: prBody + `\n\n[사용자 수정 포인트]\n${editPoint}\n위 포인트를 반드시 반영하여 수정하세요.` }
-      : pressRelease;
+      ? { ...contentSource, body: prBody + `\n\n[사용자 수정 포인트]\n${editPoint}\n위 포인트를 반드시 반영하여 수정하세요.` }
+      : contentSource;
 
     setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.GENERATING }));
 
@@ -154,8 +162,8 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
       // 검수 + 보정
       setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.REVIEWING }));
-      const prBody = pressRelease.body || pressRelease.draft || '';
-      const reviewResult = await reviewChannelContent(channelId, rawText, prBody, apiKey);
+      const prBody = contentSource.body || contentSource.draft || '';
+      const reviewResult = await reviewChannelContent(channelId, rawText, prBody, apiKey, contentSource.type);
       setChannelReviews(prev => ({ ...prev, [channelId]: reviewResult }));
 
       let finalResult = result;
@@ -177,10 +185,10 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
       // Phase 2-C: 재생성 edit_history 저장
       const afterText = finalResult?.body || finalResult?.caption || '';
-      if (pressRelease.id && typeof pressRelease.id === 'string' && beforeText !== afterText) {
+      if (contentSource.id && typeof contentSource.id === 'string' && beforeText !== afterText) {
         (async () => {
           try {
-            const savedRow = await saveChannelContent(pressRelease.id, channelId, afterText);
+            const savedRow = await saveChannelContent(contentSource.id, channelId, afterText);
             if (savedRow?.id) {
               await saveEditHistory({
                 content_type: 'channel',
@@ -212,7 +220,7 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
   };
 
   const handleGenerateAll = async () => {
-    for (const channel of REPURPOSE_CHANNELS) {
+    for (const channel of visibleChannels) {
       if (channelStates[channel.id] !== REPURPOSE_STATUS.GENERATED) {
         await handleGenerate(channel.id);
       }
@@ -224,7 +232,7 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
     c.channels?.pressrelease || c.track === '-'
   );
 
-  if (!pressRelease) {
+  if (!contentSource) {
     return (
       <div className="space-y-6">
         <h2 className="text-lg font-bold">채널 재가공</h2>
@@ -251,7 +259,10 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
     );
   }
 
-  const doneCount = Object.values(channelStates).filter(s => s === REPURPOSE_STATUS.GENERATED || s === REPURPOSE_STATUS.EDITING).length;
+  const doneCount = visibleChannels.filter(ch => {
+    const s = channelStates[ch.id];
+    return s === REPURPOSE_STATUS.GENERATED || s === REPURPOSE_STATUS.EDITING;
+  }).length;
 
   // 상태별 표시 텍스트
   const getStatusText = (state) => {
@@ -270,28 +281,28 @@ export default function RepurposeHub({ pressRelease, apiKey, contents, onSelectP
 
   return (
     <div className="space-y-4">
-      {/* 상단: 원본 보도자료 + 전체 생성 */}
+      {/* 상단: 원본 소재 + 전체 생성 */}
       <div className="flex items-center justify-between">
         <details className="flex-1">
           <summary className="text-sm font-medium cursor-pointer text-gray-700">
-            ▶ 원본 보도자료: {pressRelease.title}
+            ▶ {isPressRelease ? '원본 보도자료' : '원본 소재'}: {contentSource.title}
           </summary>
           <div className="mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 whitespace-pre-wrap max-h-40 overflow-y-auto">
-            {(pressRelease.body || pressRelease.draft || '').substring(0, 800)}
-            {(pressRelease.body || '').length > 800 ? '...' : ''}
+            {(contentSource.body || contentSource.draft || '').substring(0, 800)}
+            {(contentSource.body || '').length > 800 ? '...' : ''}
           </div>
         </details>
         <button
           onClick={handleGenerateAll}
           className="ml-4 px-4 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap"
         >
-          전체 생성 ({doneCount}/{REPURPOSE_CHANNELS.length})
+          전체 생성 ({doneCount}/{visibleChannels.length})
         </button>
       </div>
 
       {/* 채널 탭 */}
       <div className="flex border-b border-gray-200 overflow-x-auto">
-        {REPURPOSE_CHANNELS.map(channel => {
+        {visibleChannels.map(channel => {
           const state = channelStates[channel.id];
           const isActive = activeChannel === channel.id;
           const isDone = state === REPURPOSE_STATUS.GENERATED || state === REPURPOSE_STATUS.EDITING;

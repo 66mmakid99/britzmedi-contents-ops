@@ -1859,3 +1859,393 @@ ${language === 'ko+en' ? `
 
   return channelPrompts[channelId] || '';
 }
+
+// =====================================================
+// 비-보도자료 범용 프롬프트 (Step 3)
+// =====================================================
+
+/**
+ * 비-보도자료 콘텐츠의 채널별 프롬프트 생성
+ */
+export function getGeneralContentPrompt(channelId, contentSource, options = {}) {
+  const { language = 'ko' } = options;
+  const { type, title, body, metadata = {} } = contentSource;
+
+  const sourceText = buildSourceText(type, body, metadata);
+  const commonRules = getCommonRulesForGeneral();
+  const typeRules = getTypeSpecificRules(type);
+  const channelPrompt = getChannelPromptForType(channelId, type, sourceText, title, language);
+
+  return `${channelPrompt}\n\n${commonRules}\n\n${typeRules}`;
+}
+
+/**
+ * 유형별 소스 텍스트 조립
+ */
+function buildSourceText(type, body, metadata) {
+  let source = '';
+
+  switch (type) {
+    case 'research':
+      source += `[논문 정보]\n`;
+      if (metadata.paperTitle) source += `제목: ${metadata.paperTitle}\n`;
+      if (metadata.source) source += `출처: ${metadata.source}\n`;
+      if (metadata.doi) source += `DOI: ${metadata.doi}\n`;
+      source += `\n[핵심 발견/결론]\n${metadata.keyFindings || body}\n`;
+      if (metadata.relatedProduct) source += `\n[관련 제품]: ${metadata.relatedProduct}\n`;
+      if (metadata.connectionPoint) source += `[제품 연결 포인트]: ${metadata.connectionPoint}\n`;
+      break;
+
+    case 'installation':
+      source += `[납품 정보]\n`;
+      if (metadata.hospitalName) source += `병원: ${metadata.hospitalName}\n`;
+      if (metadata.product) source += `제품: ${metadata.product}\n`;
+      if (metadata.region) source += `지역: ${metadata.region}\n`;
+      if (metadata.installDate) source += `시기: ${metadata.installDate}\n`;
+      if (metadata.doctorComment) source += `\n[원장님 코멘트]\n${metadata.doctorComment}\n`;
+      if (metadata.background) source += `\n[도입 배경]\n${metadata.background}\n`;
+      if (body) source += `\n[추가 정보]\n${body}\n`;
+      break;
+
+    case 'company_life':
+      if (metadata.subType) source += `[소재 유형]: ${metadata.subType}\n`;
+      if (metadata.tone) source += `[톤]: ${metadata.tone}\n`;
+      source += `\n[내용]\n${body}\n`;
+      break;
+
+    case 'product_tips':
+      if (metadata.product) source += `[제품]: ${metadata.product}\n`;
+      if (metadata.tipType) source += `[팁 유형]: ${metadata.tipType}\n`;
+      source += `\n[내용]\n${body}\n`;
+      break;
+
+    case 'industry_trend':
+      source += `[트렌드/동향 내용]\n${body}\n`;
+      if (metadata.refLinks) source += `\n[참고 링크]\n${metadata.refLinks}\n`;
+      break;
+
+    case 'success_story':
+      if (metadata.hospitalName) source += `[병원]: ${metadata.hospitalName}\n`;
+      if (metadata.doctorName) source += `[원장님]: ${metadata.doctorName}\n`;
+      if (metadata.product) source += `[사용 제품]: ${metadata.product}\n`;
+      if (metadata.usagePeriod) source += `[사용 기간]: ${metadata.usagePeriod}\n`;
+      source += `\n[내용/후기]\n${body}\n`;
+      break;
+
+    case 'event_promo':
+      if (metadata.eventTitle) source += `[이벤트명]: ${metadata.eventTitle}\n`;
+      if (metadata.period) source += `[기간]: ${metadata.period}\n`;
+      if (metadata.target) source += `[대상]: ${metadata.target}\n`;
+      if (metadata.benefit) source += `[혜택]\n${metadata.benefit}\n`;
+      if (metadata.how) source += `[참여 방법]\n${metadata.how}\n`;
+      if (body) source += `\n[추가 정보]\n${body}\n`;
+      break;
+
+    default:
+      source = body || '';
+  }
+
+  return source;
+}
+
+/**
+ * 공통 금지 규칙 (비-보도자료용 — 보도자료 전용 팩트 규칙 조정)
+ */
+function getCommonRulesForGeneral() {
+  return `[절대 금지 — 전 채널 공통]
+
+1. 마크다운 문법 절대 사용 금지:
+   ** (굵게), ## (제목), ### (소제목), * (이탤릭), - (불릿), > (인용), \` (코드)
+   이 기호들을 하나라도 사용하면 출력 무효.
+
+2. 용어 금지 — 사용 시 출력 무효:
+   "뷰티 디바이스", "Beauty Device", "K-뷰티 디바이스", "K-Beauty Device",
+   "프리미엄 뷰티 디바이스", "뷰티 테크", "Beauty Tech", "미용기기", "피부 관리 기기",
+   "미용 의료"
+   → 올바른 표현: "전문 의료기기", "FDA 승인 의료기기", "메디컬 에스테틱 디바이스", "Medical Device"
+   → "미용 의료" → "메디컬 에스테틱 시술" 또는 "메디컬 에스테틱"
+
+3. 구조 태그 노출 금지:
+   [카드1], [카드2], [캐러셀1], [슬라이드 1/5] 같은 구조 태그를 출력하지 마라.
+   섹션 구분은 지정된 라벨([제목], [본문], [캡션] 등)만 사용.
+
+4. 팩트 완전성:
+   원본 소재에 있는 숫자(기간, 수량, 금액, 날짜)를 빠짐없이 포함하라.
+   원본 소재에 없는 정보를 만들지 마라.
+
+5. 날조 금지:
+   원본 소재에 없는 팩트를 만들지 마라.
+   원본 소재만 유일한 소스로 사용하라.
+
+6. 국기 이모지 사용 금지:
+   🇹🇭, 🇺🇸, 🇰🇷 등 국기 이모지는 렌더링 문제가 있으므로 사용하지 마세요.
+   대신 🌏, 🏥, 📍 등 일반 이모지로 국가/지역을 표현하세요.
+
+7. CTA/행동유도 링크 절대 금지:
+   데모 신청, 제품 상담, URL, 링크, {DEMO_LINK}, {CONSULT_LINK} 등 행동 유도 링크를 본문에 포함하지 마라.
+   "자세히 보기", "데모 신청하기", "상담하기" 같은 CTA 문구도 쓰지 마라.
+   CTA는 시스템이 자동으로 추가한다. AI는 본문 콘텐츠만 작성하라.`;
+}
+
+/**
+ * 유형별 검수 규칙
+ */
+export function getTypeSpecificRules(type) {
+  const rules = {
+    research: `[논문 해설 전용 규칙]
+1. 논문 원문에 없는 효과/수치 절대 추가 금지. 논문 내용만 사실로 인용.
+2. "~한 것으로 나타났다", "~라는 연구 결과가 있다" 등 인용 문체 사용.
+3. 제품명 직접 연결 시 "이 원리를 적용한 장비로는 ○○이 있다" 수준까지만.
+   "○○이 이 효과를 낸다"는 과대광고이므로 금지.
+4. 원문 DOI/출처 반드시 포함.
+5. "치료", "완치", "효과 보장" 등 의료법 위반 표현 금지.`,
+
+    installation: `[납품 사례 전용 규칙]
+1. 입력된 정보만 사용. 병원 정보를 추가로 생성하거나 추측하지 마라.
+2. "국내 최고", "최초", "유일" 등 과장 표현 금지.
+3. 병원명, 원장님 이름은 입력값 그대로만 사용.
+4. 도입 이유를 AI가 추측하지 마라. 입력되지 않았으면 언급하지 마라.
+5. 축하/환영의 톤을 유지하되, 과도한 찬사 금지.`,
+
+    company_life: `[회사 일상 전용 규칙]
+1. 자연스럽고 진정성 있는 톤. 기업 PR/홍보 느낌 배제.
+2. 직원 개인정보(이름, 직급 등) 노출 주의. 입력된 것만 사용.
+3. 사진 설명은 입력된 내용만. AI가 사진 내용을 추측하지 마라.
+4. "성장하는 기업", "열정 가득한 팀" 같은 기업 PR 클리셰 금지.
+5. 채널별 톤 차별화: Instagram은 캐주얼, LinkedIn은 기업문화 브랜딩.`,
+
+    product_tips: `[제품 팁 전용 규칙]
+1. 의료법 위반 표현 자동 검수: "치료", "효과 보장", "완치" 등 금지.
+2. 시술 결과를 약속하는 표현 금지. "~할 수 있습니다" 수준까지만.
+3. 입력된 팁 내용만 사용. AI가 시술 방법을 추가로 창작하지 마라.
+4. 전문 의료인 대상임을 전제. 환자용 표현이 아닌 의사용 표현 사용.
+5. 구체적 세팅값(주파수, 에너지량 등)은 입력된 것만 사용.`,
+
+    industry_trend: `[업계 트렌드 전용 규칙]
+1. 출처 명시 필수. 참고 링크가 있으면 반드시 포함.
+2. 주관적 예측과 객관적 데이터를 명확히 구분.
+3. "~로 전망된다"는 출처 있을 때만. 출처 없으면 "~될 수 있다" 수준.
+4. 경쟁사 비방 금지. 객관적 비교만.
+5. 자사 제품 연결은 자연스럽게, 1~2문장 이내.`,
+
+    success_story: `[성공 사례 전용 규칙]
+1. 인터뷰/후기 원문에 충실. 과장하거나 미화하지 마라.
+2. 환자 정보 절대 노출 금지.
+3. "치료 효과" 직접 언급 금지. "만족도", "사용 경험" 수준으로.
+4. 병원 동의 없는 정보 추측 금지.
+5. 원장님 말투를 AI가 지어내지 마라. 코멘트가 있으면 원문 사용.`,
+
+    event_promo: `[이벤트/프로모션 전용 규칙]
+1. 일시, 장소, 혜택, 참여 방법의 정확성이 최우선.
+2. 입력되지 않은 조건(가격, 수량 등)을 AI가 만들지 마라.
+3. 긴급성 과장 금지 ("지금 바로!", "마감 임박!" 남발 금지).
+4. 이벤트 정보에 없는 혜택을 추가하지 마라.`,
+  };
+
+  return rules[type] || '';
+}
+
+/**
+ * 채널별 프롬프트 (비-보도자료용)
+ * 기존 채널 프롬프트 구조를 재활용하되 "보도자료"→"원본 소재"로 변경
+ */
+function getChannelPromptForType(channelId, contentType, sourceText, title, language = 'ko') {
+  const roleMap = {
+    research: '피부과/메디컬 에스테틱 분야의 논문 해설 전문 콘텐츠 작가',
+    installation: '의료기기 기업의 비즈니스 소식 전문 콘텐츠 작가',
+    company_life: '기업 브랜딩 및 소셜미디어 콘텐츠 전문 작가',
+    product_tips: '의료기기 전문가이자 시술 교육 콘텐츠 작가',
+    industry_trend: '메디컬 에스테틱 업계 전문 애널리스트이자 콘텐츠 작가',
+    success_story: '의료기기 도입 사례 스토리텔링 전문 작가',
+    event_promo: '이벤트 마케팅 전문 카피라이터',
+  };
+  const role = roleMap[contentType] || '전문 콘텐츠 작가';
+
+  const channelRules = {
+    'newsletter': `[독자 페르소나]
+· 피부과/에스테틱 원장님 (의사)
+· 바쁘고, 새로운 장비/기술 트렌드에 관심
+· 직접적 이익(매출, 환자 만족)에 민감
+
+[톤앤매너]
+· 존칭 사용 (~습니다, ~하셨을 겁니다)
+· 전문적이되 따뜻한 톤
+· "원장님"이라는 호칭을 자연스럽게 2~3회 사용
+
+[포맷 규칙]
+· 한 문단 2~4문장 (모바일 가독성)
+· 각 블록에 소제목
+· 전문용어는 괄호로 부연
+· 한 줄에 50자 이내 권장
+
+[분량] 반드시 1,500자 이상, 2,500자 이내.
+
+[출력 형식]
+[제목]
+Subject line — 40자 내외, "베네핏 + 구체성" 조합.
+
+[프리헤더]
+Preview text — 40~60자.
+
+[인트로]
+"원장님, 안녕하세요. 브릿츠메디입니다."로 시작. 목차형 가치 미리보기.
+
+[본문1]
+핵심 내용 + 원장님 관점 (소제목 + 3~5문장)
+
+[본문2]
+심화 내용 또는 기술/제품 관점 (소제목 + 3~5문장)
+
+[마무리]
+따뜻한 마무리 인사 (1~2문장). 링크/URL 금지.
+
+[푸터]
+—
+브릿츠메디 | 메디컬 에스테틱 디바이스 전문기업
+담당: 이성호 CMO | sh.lee@britzmedi.co.kr | 010-6525-9442
+www.britzmedi.co.kr`,
+
+    'naver-blog': `[독자 페르소나]
+· 1차: 피부과·에스테틱 원장, 장비 도입 의사결정자
+· 2차: 의료기기 제조사 RA/수출 담당자, 유통 파트너
+· 검색 패턴: 질문형 ("RF 리프팅 장비 비교", "의료기기 해외인허가")
+
+[톤앤매너 — 해요체 필수]
+· 반드시 해요체 사용: ~합니다/~해요/~인데요/~거든요/~드릴게요
+· "~다" 체(합쇼체/경어체) 절대 금지
+· 친근하되 전문적인 블로그 톤
+· 독자에게 말 걸기: "혹시 ~에 대해 들어보셨나요?" 같은 질문형 활용
+
+[SEO 규칙]
+· 핵심키워드(3~5개)를 제목, 본문 첫 문단, 소제목에 자연스럽게 삽입
+· 보조키워드(3~5개)를 본문에 2~3회 분산 배치
+
+[포맷 규칙]
+· 한 문단 3~5문장
+· 질문형 소제목 (예: "토르RF, 어떤 점이 다를까요?")
+· [IMAGE: 이미지 설명] 플레이스홀더 3개 삽입
+
+[분량] 반드시 2,000자 이상, 3,500자 이내.
+
+[출력 형식]
+[핵심키워드] 키워드1, 키워드2, 키워드3
+[보조키워드] 키워드4, 키워드5, 키워드6
+
+[제목]
+SEO 최적화 제목 — 핵심키워드 포함, 50자 이내.
+
+[본문]
+도입부(2~3문장) → 소제목1 + 본문 → 소제목2 + 본문 → 소제목3 + 본문 → 마무리
+[IMAGE: 이미지 설명] 플레이스홀더 3개 적절한 위치에 삽입.
+
+[태그]
+블로그 태그 5~8개 (쉼표 구분)`,
+
+    'kakao': `[독자 페르소나]
+· 브릿츠메디 카카오톡 채널 구독자 (원장님, 유통 파트너)
+· 모바일에서 빠르게 훑어보는 사람
+
+[톤앤매너]
+· 격식체, 간결하고 핵심 강조
+· 이모지는 포인트용으로만
+
+[포맷 규칙]
+· TEXT 포스트 (카드뉴스 아님)
+· 한 줄에 25자 이내 권장
+· 핵심 메시지 1개에 집중
+
+[분량] 150~300자 이내. 300자 초과 시 출력 무효.
+
+검수 결과, 글자 수, 문체 분석 등 메타데이터를 본문에 포함하지 마라.
+콘텐츠 텍스트만 출력하라.
+
+[출력 형식]
+본문만 바로 출력 (라벨 없이).`,
+
+    'instagram': `[독자 페르소나]
+· 피부과/에스테틱 관계자 + 일반 팔로워
+· 비주얼 중심, 짧은 캡션 선호
+
+[톤앤매너]
+· 간결한 명사형, 비주얼 중심
+· 이모지 적극 활용
+· 캐주얼하되 전문성 유지
+
+[포맷 규칙]
+· 단일 피드 포스트 (캐러셀 아님)
+· 캡션 50~150자
+· 해시태그 15~20개
+
+[출력 형식]
+[캡션]
+피드 캡션 (50~150자)
+
+[이미지 가이드]
+이미지 제작 가이드 (텍스트 오버레이, 색감, 구도 등)
+
+[해시태그]
+#브릿츠메디 #BRITZMEDI #토르RF #TORRRF (필수)
++ 주제별 해시태그 11~16개`,
+
+    'linkedin': `[독자 페르소나]
+· B2B 의사결정자: 유통 파트너, 디스트리뷰터, 의료기기 관계자
+· 전문성과 인사이트에 반응
+· 영어권 오디언스도 포함 가능
+
+[톤앤매너]
+· 격식체, 비즈니스 전문가
+· Hook → Context → Content → Insight → CTA(참여유도) 구조
+· 개인적 경험/인사이트를 자연스럽게 녹임
+
+[포맷 규칙]
+· 800~1,200자
+· 첫 줄은 강력한 Hook (질문 또는 놀라운 사실)
+· 핵심 팩트를 ·불릿으로 정리
+
+[출력 형식]
+[훅]
+첫 1~2문장 — 스크롤을 멈추게 하는 오프닝
+
+[본문]
+Body (6~10줄) — 스토리/맥락 + 인사이트 + 핵심 팩트 불릿 + 전망
+
+[CTA]
+참여 유도 (1~2문장). 링크/URL 절대 금지.
+· 댓글 유도 또는 의견 질문
+
+[해시태그]
+영문 위주 8~10개.
+브랜드: #BRITZMEDI #TORRRF
+업종: #MedicalAesthetics #MedicalDevice #Dermatology #EBD
+한글 태그 1~2개: #의료기기 #메디컬에스테틱
+금지: #뷰티디바이스 #BeautyDevice #K뷰티 #KBeauty
+${language === 'ko+en' ? `\n[영문 버전]\n위 한국어 포스트를 영문으로 번역. 동일한 구조 유지.` : ''}`,
+  };
+
+  const rules = channelRules[channelId] || '';
+
+  return `당신은 ${role}입니다.
+아래 원본 소재를 ${getChannelLabel(channelId)}에 맞는 콘텐츠로 변환하세요.
+
+[원본 소재 제목]
+${title || '(제목 없음)'}
+
+[원본 소재]
+${sourceText}
+
+${rules}`;
+}
+
+/**
+ * 채널 ID → 한글 라벨
+ */
+function getChannelLabel(channelId) {
+  const labels = {
+    'newsletter': '이메일 뉴스레터',
+    'naver-blog': '네이버 블로그',
+    'kakao': '카카오톡 채널',
+    'instagram': '인스타그램',
+    'linkedin': '링크드인',
+  };
+  return labels[channelId] || channelId;
+}

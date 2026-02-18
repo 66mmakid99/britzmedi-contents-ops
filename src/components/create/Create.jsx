@@ -8,6 +8,8 @@ import { generatePressReleaseDocx } from '../../lib/generatePressReleaseDocx';
 import { saveAs } from 'file-saver';
 import { updatePressRelease, saveEditHistory } from '../../lib/supabaseData';
 import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../../lib/editUtils';
+import { CONTENT_TYPES } from '../../constants/contentTypes';
+import GeneralContentForm from './GeneralContentForm';
 
 // v2 step labels for the stepper
 const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수/수정', '결과'];
@@ -237,7 +239,10 @@ function openPrintView(text, title, images = []) {
 // =====================================================
 // Main Component
 // =====================================================
-export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClearPRSource, knowledgeBase, onGoToRepurpose }) {
+export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClearPRSource, knowledgeBase, onGoToRepurpose, onGoToRepurposeGeneral }) {
+  // --- Content type selection state ---
+  const [selectedType, setSelectedType] = useState(null);
+
   // --- Shared state ---
   const [selectedChannels, setSelectedChannels] = useState(['pressrelease']);
   const [showKey, setShowKey] = useState(false);
@@ -804,13 +809,52 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   }
 
   // ===========================================
-  // RENDER — V2 FACTORY MODE (6-step flow)
+  // RENDER — CONTENT TYPE SELECTION
+  // ===========================================
+  if (!selectedType) {
+    return (
+      <div className="space-y-5">
+        <h2 className="text-lg font-bold">콘텐츠 팩토리</h2>
+        <p className="text-[12px] text-mist">어떤 콘텐츠를 만들까요?</p>
+        <div className="grid grid-cols-4 gap-3">
+          {Object.entries(CONTENT_TYPES).map(([key, type]) => (
+            <button
+              key={key}
+              onClick={() => setSelectedType(key)}
+              className="flex flex-col items-center gap-1.5 p-4 bg-white rounded-xl border border-pale hover:border-accent transition-colors cursor-pointer"
+            >
+              <span className="text-2xl">{type.icon}</span>
+              <span className="text-[11px] font-medium text-dark">{type.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Non-press-release type → GeneralContentForm
+  if (selectedType !== 'press_release') {
+    return (
+      <GeneralContentForm
+        contentType={selectedType}
+        onBack={() => setSelectedType(null)}
+        onSubmit={onGoToRepurposeGeneral}
+        apiKey={apiKey}
+      />
+    );
+  }
+
+  // ===========================================
+  // RENDER — V2 FACTORY MODE (6-step flow) — press_release only
   // ===========================================
   const v2StepIdx = V2_STEP_INDEX[v2Step] ?? 0;
   const isPRChannel = true; // Always pressrelease
 
   return (
     <div className="space-y-5">
+      {v2Step === 'input' && (
+        <button onClick={() => setSelectedType(null)} className="text-[12px] text-steel hover:text-dark border-none bg-transparent cursor-pointer">← 유형 다시 선택</button>
+      )}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">보도자료 제작</h2>
         {v2Step !== 'input' && (

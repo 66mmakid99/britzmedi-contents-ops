@@ -39,8 +39,8 @@ export default function App() {
   // PR → Channel content creation source
   const [prSourceData, setPrSourceData] = useState(null);
 
-  // Repurpose: selected press release for channel repurposing
-  const [repurposePR, setRepurposePR] = useState(null);
+  // Repurpose: selected content source for channel repurposing
+  const [repurposeSource, setRepurposeSource] = useState(null);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
@@ -150,7 +150,8 @@ export default function App() {
   };
 
   const handleCreateFromPR = (prItem) => {
-    setRepurposePR({
+    setRepurposeSource({
+      type: 'press_release',
       id: prItem.id,
       title: prItem.title,
       date: prItem.date,
@@ -161,12 +162,26 @@ export default function App() {
   };
 
   const handleGoToRepurpose = (prData) => {
-    setRepurposePR({
+    setRepurposeSource({
+      type: 'press_release',
       id: prData.id || Date.now(),
       title: prData.title,
       date: prData.date,
       body: prData.draft || prData.body || '',
       draft: prData.draft || prData.body || '',
+    });
+    setActivePage('repurpose');
+  };
+
+  const handleGoToRepurposeGeneral = (sourceData) => {
+    setRepurposeSource({
+      type: sourceData.type,
+      id: sourceData.id || `${sourceData.type}-${Date.now()}`,
+      title: sourceData.title || '',
+      body: sourceData.body || '',
+      date: sourceData.date || new Date().toISOString().slice(0, 10),
+      metadata: sourceData.metadata || {},
+      channels: sourceData.channels || [],
     });
     setActivePage('repurpose');
   };
@@ -213,14 +228,15 @@ export default function App() {
             onClearPRSource={() => { setPrSourceData(null); setActivePage('pipeline'); }}
             knowledgeBase={kbEntries}
             onGoToRepurpose={handleGoToRepurpose}
+            onGoToRepurposeGeneral={handleGoToRepurposeGeneral}
           />
         )}
         {activePage === 'repurpose' && (
           <RepurposeHub
-            pressRelease={repurposePR}
+            contentSource={repurposeSource}
             apiKey={apiKey}
             contents={contents}
-            onSelectPR={(item) => setRepurposePR(item)}
+            onSelectPR={(item) => setRepurposeSource({ type: 'press_release', ...item })}
           />
         )}
         {activePage === 'knowledge' && (

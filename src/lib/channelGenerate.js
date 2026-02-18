@@ -3,7 +3,7 @@
  * 보도자료 → Claude API → 채널별 콘텐츠
  */
 
-import { getRepurposePrompt, buildReviewPrompt, buildAutoFixPrompt } from '../constants/prompts';
+import { getRepurposePrompt, getGeneralContentPrompt, buildReviewPrompt, buildAutoFixPrompt, getTypeSpecificRules } from '../constants/prompts';
 import { REPURPOSE_CHANNELS } from '../constants/channels';
 import { buildContext } from './contextBuilder';
 import { channelToDb, generateCtaLink, generateCampaignSlug } from './supabaseData';
@@ -117,8 +117,11 @@ function removeSectionLabels(text) {
 
 /**
  * 단일 채널 콘텐츠 생성
+ * @param {object} contentSource - 콘텐츠 소스 (type, body, metadata 등)
+ * @param {string} channelId - 채널 ID
+ * @param {object} options - { apiKey }
  */
-export async function generateChannelContent(pressRelease, channelId, options = {}) {
+export async function generateChannelContent(contentSource, channelId, options = {}) {
   const { apiKey } = options;
   if (!apiKey) throw new Error('API 키가 필요합니다');
 
@@ -129,7 +132,18 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   const dbChannel = channelToDb[channelId] || channelId;
   const learningContext = await buildContext(dbChannel, null, null);
 
-  const prompt = getRepurposePrompt(channelId, pressRelease, options) + learningContext;
+  // 유형에 따라 다른 프롬프트 생성
+  const sourceType = contentSource.type || 'press_release';
+  let prompt;
+  if (sourceType === 'press_release') {
+    // 기존 보도자료 프롬프트 (100% 유지)
+    prompt = getRepurposePrompt(channelId, contentSource, options);
+  } else {
+    // 비-보도자료 범용 프롬프트
+    prompt = getGeneralContentPrompt(channelId, contentSource, options);
+  }
+  prompt += learningContext;
+
   const maxTokens = channelId === 'kakao' ? 500
     : channelId === 'instagram' ? 1000
     : channelId === 'naver-blog' ? 3000 : 2000;
@@ -148,19 +162,19 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   const parsed = parseChannelResponse(channelId, noMeta);
 
   // 5단계: 코드에서 기계적 CTA 추가
-  return appendCtaBlock(channelId, parsed, pressRelease);
+  return appendCtaBlock(channelId, parsed, contentSource);
 }
 
 /**
  * 전체 채널 일괄 생성
  */
-export async function generateAllChannels(pressRelease, options = {}) {
+export async function generateAllChannels(contentSource, options = {}) {
   const results = {};
   const errors = {};
 
   for (const channel of REPURPOSE_CHANNELS) {
     try {
-      results[channel.id] = await generateChannelContent(pressRelease, channel.id, options);
+      results[channel.id] = await generateChannelContent(contentSource, channel.id, options);
     } catch (error) {
       errors[channel.id] = error.message;
       console.error(`[${channel.name}] 생성 실패:`, error);
@@ -499,16 +513,21 @@ function appendCtaBlock(channelId, parsed, pressRelease) {
  * 원본 보도자료를 소스로 사용하여 팩트 대조
  * Returns { summary: { critical, warning }, issues: Issue[] }
  */
-export async function reviewChannelContent(channelId, contentText, pressReleaseBody, apiKey) {
+export async function reviewChannelContent(channelId, contentText, pressReleaseBody, apiKey, contentType) {
   // Phase 3: 팩트 데이터를 검수 프롬프트에 주입 (검수 정확도 향상)
   const dbChannel = channelToDb[channelId] || channelId;
   const factContext = await buildContext(dbChannel, null, null);
+
+  // 유형별 검수 규칙 추가
+  const typeReviewRules = contentType && contentType !== 'press_release'
+    ? '\n\n' + getTypeSpecificRules(contentType)
+    : '';
 
   const prompt = buildReviewPrompt({
     content: contentText,
     channelId,
     userSourceText: pressReleaseBody,
-  }) + factContext;
+  }) + typeReviewRules + factContext;
 
   const raw = await callClaudeForChannel(prompt, apiKey, 2000);
   const jsonMatch = raw.match(/\[[\s\S]*\]/);
