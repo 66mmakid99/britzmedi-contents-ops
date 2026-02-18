@@ -95,6 +95,7 @@ function removeSectionLabels(text) {
     .replace(/^\[프리헤더\]\s*/gm, '')
     .replace(/^\[핵심요약\]\s*/gm, '')
     .replace(/^\[CTA\]\s*/gm, '')
+    .replace(/^\[마무리\]\s*/gm, '')
     .replace(/^\[훅\]\s*/gm, '')
     .replace(/^\[핵심 포인트\]\s*/gm, '')
     .replace(/^\[캡션\]\s*/gm, '')
@@ -129,7 +130,8 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   const learningContext = await buildContext(dbChannel, null, null);
 
   const prompt = getRepurposePrompt(channelId, pressRelease, options) + learningContext;
-  const maxTokens = (channelId === 'kakao' || channelId === 'instagram') ? 1000
+  const maxTokens = channelId === 'kakao' ? 500
+    : channelId === 'instagram' ? 1000
     : channelId === 'naver-blog' ? 3000 : 2000;
   const response = await callClaudeForChannel(prompt, apiKey, maxTokens);
 
@@ -139,11 +141,14 @@ export async function generateChannelContent(pressRelease, channelId, options = 
   // 2단계: 채널명 라벨 제거 (AI가 첫 줄에 "LinkedIn 포스트" 등 넣을 때 대비)
   const noLabel = stripChannelLabel(cleaned);
 
-  // 3단계: 채널별 파싱
-  const parsed = parseChannelResponse(channelId, noLabel);
+  // 3단계: AI 잔여 메타텍스트 제거
+  const noMeta = stripAiMeta(noLabel, channelId);
 
-  // 4단계: CTA 플레이스홀더 치환
-  return replaceCtaPlaceholders(channelId, parsed, pressRelease);
+  // 4단계: 채널별 파싱
+  const parsed = parseChannelResponse(channelId, noMeta);
+
+  // 5단계: 코드에서 기계적 CTA 추가
+  return appendCtaBlock(channelId, parsed, pressRelease);
 }
 
 /**
@@ -192,7 +197,7 @@ function parseChannelResponse(channelId, rawResponse) {
 // =====================================================
 
 function parseNewsletter(text) {
-  const sections = extractSections(text, ['제목', '프리헤더', '인트로', '본문1', '본문2', '본문3', '핵심요약', 'CTA', '푸터']);
+  const sections = extractSections(text, ['제목', '프리헤더', '인트로', '본문1', '본문2', '본문3', '핵심요약', 'CTA', '마무리', '푸터']);
 
   // 섹션이 파싱되면 구조화, 안 되면 전체 텍스트
   if (sections['제목'] || sections['인트로']) {
@@ -202,7 +207,7 @@ function parseNewsletter(text) {
       sections['본문2'],
       sections['본문3'],
       sections['핵심요약'] ? '\n' + sections['핵심요약'] : '',
-      sections['CTA'],
+      sections['CTA'] || sections['마무리'],
     ].filter(Boolean).join('\n\n');
 
     return {
@@ -407,78 +412,79 @@ function extractSections(text, labels) {
 }
 
 // =====================================================
-// CTA 플레이스홀더 치환
+// AI 잔여 메타텍스트 제거
 // =====================================================
 
 /**
- * AI가 생성한 {DEMO_LINK}, {CONSULT_LINK} 플레이스홀더를 실제 추적 링크로 치환.
- * 플레이스홀더가 누락되었으면 본문 끝에 채널별 CTA를 강제 추가.
- * 채널별 CTA 형식:
- *   이메일: HTML <a> 버튼 (데모+상담)
- *   네이버: URL 텍스트 별도 줄 (데모+상담)
- *   링크드인: URL 별도 줄 (데모만)
- *   카카오: URL 별도 줄 (데모만)
- *   인스타: 텍스트 안내만 (링크 없음)
+ * AI가 출력에 넣는 잔여 메타텍스트 제거:
+ * - "출력 시작", "출력 끝" 같은 AI 메타 라인
+ * - 카카오톡 검수 메타데이터 ("글자 수: ...", "문체: ...", "이모지: ..." 등)
+ * - {DEMO_LINK}, {CONSULT_LINK} 플레이스홀더 잔여
  */
-function replaceCtaPlaceholders(channelId, parsed, pressRelease) {
+function stripAiMeta(text, channelId) {
+  if (!text) return '';
+  let cleaned = text;
+
+  // AI 메타 라인 제거
+  cleaned = cleaned.replace(/^.*출력\s*시작.*$/gm, '');
+  cleaned = cleaned.replace(/^.*출력\s*끝.*$/gm, '');
+  cleaned = cleaned.replace(/^-{3,}\s*$/gm, '');
+
+  // {DEMO_LINK}, {CONSULT_LINK} 플레이스홀더가 남아있으면 해당 줄 전체 제거
+  cleaned = cleaned.replace(/.*\{DEMO_LINK\}.*\n?/g, '');
+  cleaned = cleaned.replace(/.*\{CONSULT_LINK\}.*\n?/g, '');
+
+  // 카카오톡: AI가 검수 결과 메타데이터를 본문에 포함시키는 문제 대응
+  if (channelId === 'kakao') {
+    // "글자 수:" 이후 텍스트 전체 잘라냄
+    const metaIdx = cleaned.indexOf('글자 수:');
+    if (metaIdx > 0) {
+      cleaned = cleaned.substring(0, metaIdx);
+    }
+    // 개별 메타 라인도 제거 (위 잘라내기로 못 잡힌 경우 대비)
+    cleaned = cleaned.replace(/^.*글자\s*수\s*:.*$/gm, '');
+    cleaned = cleaned.replace(/^.*문체\s*:.*$/gm, '');
+    cleaned = cleaned.replace(/^.*이모지\s*:.*$/gm, '');
+    cleaned = cleaned.replace(/^.*팩트\s*포함\s*:.*$/gm, '');
+    cleaned = cleaned.replace(/^.*검수\s*결과.*$/gm, '');
+  }
+
+  return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// =====================================================
+// 기계적 CTA 블록 추가
+// =====================================================
+
+/**
+ * 생성된 콘텐츠 본문 끝에 채널별 고정 CTA 블록을 기계적으로 추가.
+ * AI는 CTA를 쓰지 않음. 코드에서만 추가.
+ */
+function appendCtaBlock(channelId, parsed, pressRelease) {
   const dbChannel = channelToDb[channelId] || channelId;
   const campaign = generateCampaignSlug(pressRelease?.id);
-  const demoLink = generateCtaLink('demo', dbChannel, campaign);
-  const consultLink = generateCtaLink('consult', dbChannel, campaign);
+  const demoUrl = generateCtaLink('demo', dbChannel, campaign);
+  const consultUrl = generateCtaLink('consult', dbChannel, campaign);
 
   const bodyField = parsed.caption !== undefined ? 'caption' : 'body';
   let text = parsed[bodyField] || '';
 
-  // 인스타그램: 링크 불가 — 텍스트 안내만
-  if (channelId === 'instagram') {
-    text = text.replace(/\{DEMO_LINK\}/g, '').replace(/\{CONSULT_LINK\}/g, '');
-    if (!text.includes('프로필 링크')) {
-      text += '\n\n프로필 링크에서 데모 신청 & 제품 문의 가능!';
-    }
-    return { ...parsed, [bodyField]: text.replace(/\n{3,}/g, '\n\n').trim() };
-  }
-
-  // 채널별 CTA 블록 정의
-  const ctaBlocks = {
-    'newsletter': `<a href="${demoLink}" style="display:inline-block;padding:12px 24px;background:#8B7355;color:#fff;text-decoration:none;border-radius:6px;margin-right:8px;">📋 데모 신청하기</a>\n<a href="${consultLink}" style="display:inline-block;padding:12px 24px;background:#555;color:#fff;text-decoration:none;border-radius:6px;">💬 제품 상담하기</a>`,
-    'naver-blog': `👉 데모 신청하기: ${demoLink}\n👉 제품 상담하기: ${consultLink}`,
-    'linkedin': `🔗 데모 신청하기 👇\n${demoLink}`,
-    'kakao': `▶ 자세히 보기\n${demoLink}`,
-  };
-  const ctaBlock = ctaBlocks[channelId] || `📋 데모 신청하기: ${demoLink}\n💬 제품 상담하기: ${consultLink}`;
-
-  const hadPlaceholders = text.includes('{DEMO_LINK}') || text.includes('{CONSULT_LINK}');
-
-  if (hadPlaceholders) {
-    switch (channelId) {
-      case 'newsletter':
-        // 이메일: placeholder 포함 줄 제거 후 HTML 버튼 추가
-        text = text.replace(/.*\{DEMO_LINK\}.*\n?/g, '');
-        text = text.replace(/.*\{CONSULT_LINK\}.*\n?/g, '');
-        text = text.trim() + '\n\n' + ctaBlock;
-        break;
-      case 'naver-blog':
-        // 네이버: URL 텍스트로 치환 (자동 링크 변환됨)
-        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
-        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
-        break;
-      case 'linkedin':
-        // 링크드인: 데모만 치환, 상담 줄 제거
-        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
-        text = text.replace(/.*\{CONSULT_LINK\}.*\n?/g, '');
-        break;
-      case 'kakao':
-        // 카카오: 데모만 치환, 상담 줄 제거
-        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
-        text = text.replace(/.*\{CONSULT_LINK\}.*\n?/g, '');
-        break;
-      default:
-        text = text.replace(/\{DEMO_LINK\}/g, demoLink);
-        text = text.replace(/\{CONSULT_LINK\}/g, consultLink);
-    }
-  } else {
-    // 플레이스홀더 없음 → 본문 끝에 채널별 CTA 강제 추가
-    text += '\n\n' + ctaBlock;
+  switch (channelId) {
+    case 'newsletter':
+      text += `\n\n📋 데모 신청하기: ${demoUrl}\n💬 제품 상담하기: ${consultUrl}`;
+      break;
+    case 'naver-blog':
+      text += `\n\n👉 데모 신청하기: ${demoUrl}\n👉 제품 상담하기: ${consultUrl}`;
+      break;
+    case 'linkedin':
+      text += `\n\n🔗 데모 신청하기\n${demoUrl}`;
+      break;
+    case 'kakao':
+      text += `\n\n▶ 자세히 보기\n${demoUrl}`;
+      break;
+    case 'instagram':
+      // 인스타: CTA 링크 없음
+      break;
   }
 
   return { ...parsed, [bodyField]: text.replace(/\n{3,}/g, '\n\n').trim() };

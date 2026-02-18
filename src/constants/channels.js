@@ -29,7 +29,7 @@ export const REPURPOSE_CHANNELS = [
     name: '카카오톡 채널',
     icon: '💬',
     format: '채널 포스트',
-    charRange: { min: 300, max: 400 },
+    charRange: { min: 150, max: 300 },
     tone: '격식체, 간결하고 핵심 강조',
     features: ['핵심 메시지', '이미지+링크', 'CTA 문구'],
     outputFormat: 'text',
