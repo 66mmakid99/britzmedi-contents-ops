@@ -11,6 +11,7 @@ import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../.
 import { CONTENT_TYPES, getAutoCheckedChannels } from '../../constants/contentTypes';
 import { REPURPOSE_CHANNELS } from '../../constants/channels';
 import GeneralContentForm from './GeneralContentForm';
+import ResearchExplorer from './ResearchExplorer';
 
 // v2 step labels for the stepper
 const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수/수정', '결과'];
@@ -938,6 +939,19 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
           ))}
         </div>
       </div>
+    );
+  }
+
+  // research → ResearchExplorer (AI 자동 검색)
+  if (selectedType === 'research') {
+    return (
+      <ResearchExplorer
+        onBack={() => setSelectedType(null)}
+        onSubmit={onGoToRepurposeGeneral}
+        apiKey={apiKey}
+        tracker={tracker}
+        onTokenUpdate={onTokenUpdate}
+      />
     );
   }
 

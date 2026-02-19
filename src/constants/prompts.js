@@ -1991,11 +1991,19 @@ function buildSourceText(type, body, metadata) {
     case 'research':
       source += `[논문 정보]\n`;
       if (metadata.paperTitle) source += `제목: ${metadata.paperTitle}\n`;
-      if (metadata.source) source += `출처: ${metadata.source}\n`;
+      if (metadata.journal) source += `저널: ${metadata.journal}\n`;
+      if (metadata.source && !metadata.journal) source += `출처: ${metadata.source}\n`;
+      if (metadata.pubDate) source += `발행일: ${metadata.pubDate}\n`;
       if (metadata.doi) source += `DOI: ${metadata.doi}\n`;
+      if (metadata.url) source += `URL: ${metadata.url}\n`;
+      if (metadata.abstract) source += `\n[초록]\n${metadata.abstract}\n`;
+      if (metadata.summaryKr) source += `\n[AI 요약]\n${metadata.summaryKr}\n`;
       source += `\n[핵심 발견/결론]\n${metadata.keyFindings || body}\n`;
-      if (metadata.relatedProduct) source += `\n[관련 제품]: ${metadata.relatedProduct}\n`;
-      if (metadata.connectionPoint) source += `[제품 연결 포인트]: ${metadata.connectionPoint}\n`;
+      if (metadata.contentAngle) source += `\n[콘텐츠 앵글]: ${metadata.contentAngle}\n`;
+      if (metadata.relatedProducts) source += `[관련 제품]: ${metadata.relatedProducts}\n`;
+      if (metadata.relatedProduct && !metadata.relatedProducts) source += `[관련 제품]: ${metadata.relatedProduct}\n`;
+      if (metadata.productConnection) source += `[제품 연결 포인트]: ${metadata.productConnection}\n`;
+      if (metadata.connectionPoint && !metadata.productConnection) source += `[제품 연결 포인트]: ${metadata.connectionPoint}\n`;
       break;
 
     case 'installation':

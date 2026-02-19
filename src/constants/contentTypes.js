@@ -22,21 +22,14 @@ export const CONTENT_TYPES = {
   research: {
     label: '논문/연구 해설',
     icon: '📑',
-    description: '피부과/에스테틱 논문을 BRITZMEDI 관점에서 해설',
-    flow: 'simple',
+    description: 'AI가 최신 논문을 자동으로 찾아 콘텐츠를 추천합니다',
+    flow: 'research_explorer',
     persona: 'BRITZMEDI 리서치 팀. 학술적 근거 기반, 인용 문체, 객관적 톤. 논문 데이터를 정확히 전달하되 이해하기 쉽게 해설.',
     channelFit: {
       pressrelease: 0, homepage: 3, newsletter: 3,
       'naver-blog': 3, linkedin: 3, instagram: 2, kakao: 1,
     },
-    fields: [
-      { key: 'paperTitle', label: '논문 제목', required: true, placeholder: '예: Radiofrequency for Skin Tightening: A Systematic Review' },
-      { key: 'source', label: '저널/출처', placeholder: '예: Journal of Cosmetic Dermatology, 2026' },
-      { key: 'doi', label: 'DOI 또는 링크', placeholder: '예: 10.1111/jocd.12345 또는 URL' },
-      { key: 'keyFindings', label: '핵심 결론', required: true, type: 'textarea', placeholder: '논문의 핵심 발견/결론을 자유롭게 적어주세요' },
-      { key: 'relatedProduct', label: '관련 제품', type: 'product_select' },
-      { key: 'connectionPoint', label: '제품 연결 포인트', type: 'textarea', placeholder: '예: 논문의 고주파 원리가 TORR RF에 적용된 기술과 동일' },
-    ],
+    fields: null,
   },
 
   installation: {
