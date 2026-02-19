@@ -1,11 +1,14 @@
 export const NAV_ITEMS = [
-  { id: 'dashboard', label: '대시보드', icon: '◈' },
-  { id: 'calendar', label: '캘린더', icon: '◫' },
-  { id: 'pipeline', label: '파이프라인', icon: '⇄' },
-  { id: 'publish', label: '발행관리', icon: '▤' },
-  { id: 'create', label: '콘텐츠제작', icon: '＋' },
-  { id: 'repurpose', label: '채널재가공', icon: '↹' },
-  { id: 'knowledge', label: '지식베이스', icon: '◉' },
+  { id: 'dashboard', label: '대시보드', icon: '◈', group: 'content' },
+  { id: 'calendar', label: '캘린더', icon: '◫', group: 'content' },
+  { id: 'pipeline', label: '파이프라인', icon: '⇄', group: 'content' },
+  { id: 'publish', label: '발행관리', icon: '▤', group: 'content' },
+  { id: 'create', label: '콘텐츠제작', icon: '＋', group: 'content' },
+  { id: 'repurpose', label: '채널재가공', icon: '↹', group: 'content' },
+  { id: 'knowledge', label: '지식베이스', icon: '◉', group: 'content' },
+  { id: 'website', label: '홈페이지', icon: '🌐', group: 'admin' },
+  { id: 'chatbot', label: '챗봇', icon: '🤖', group: 'admin' },
+  { id: 'leads', label: '리드', icon: '👤', group: 'admin' },
 ];
 
 export const PIPELINE_STAGES = [

@@ -13,6 +13,9 @@ import Publish from './components/publish/Publish';
 import Create from './components/create/Create';
 import KnowledgeBase from './components/knowledge/KnowledgeBase';
 import RepurposeHub from './components/repurpose/RepurposeHub';
+import WebsiteManage from './components/website/WebsiteManage';
+import ChatbotManage from './components/chatbot/ChatbotManage';
+import LeadManage from './components/lead/LeadManage';
 import useLocalStorage from './hooks/useLocalStorage';
 import { DEMO_CONTENTS } from './constants';
 import { DEFAULT_KB_ENTRIES } from './constants/knowledgeBase';
@@ -270,6 +273,15 @@ export default function App() {
         )}
         {activePage === 'knowledge' && (
           <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} apiKey={apiKey} setApiKey={setApiKey} showToast={showToast} tracker={trackerRef.current} onTokenUpdate={handleTokenUpdate} />
+        )}
+        {activePage === 'website' && (
+          <WebsiteManage showToast={showToast} />
+        )}
+        {activePage === 'chatbot' && (
+          <ChatbotManage showToast={showToast} />
+        )}
+        {activePage === 'leads' && (
+          <LeadManage showToast={showToast} />
         )}
         <TokenUsageBadge summary={tokenSummary} />
       </main>
