@@ -15,22 +15,22 @@ describe('STEP 4: 채널 재가공 프롬프트', () => {
     expect(prompt).toContain('SEO');
     expect(prompt).toContain('소제목');
     expect(prompt).toContain('IMAGE');
-    expect(prompt).toContain('1,500~2,500자');
+    expect(prompt).toContain('2,200자');
   });
 
-  it('카카오톡 프롬프트가 300~500자, 이모지, 불릿을 포함해야 한다', () => {
+  it('카카오톡 프롬프트가 250자 이내, 이모지, 헤드라인을 포함해야 한다', () => {
     const prompt = getRepurposePrompt('kakao', MOCK_PRESS_RELEASE);
-    expect(prompt).toContain('300~500자');
+    expect(prompt).toContain('250자');
     expect(prompt).toContain('이모지');
     expect(prompt).toContain('헤드라인');
   });
 
-  it('인스타그램 프롬프트가 슬라이드, JSON 출력을 포함해야 한다', () => {
+  it('인스타그램 프롬프트가 캡션, 해시태그, 이미지 가이드를 포함해야 한다', () => {
     const prompt = getRepurposePrompt('instagram', MOCK_PRESS_RELEASE);
-    expect(prompt).toContain('슬라이드');
-    expect(prompt).toContain('5~7');
+    expect(prompt).toContain('캡션');
     expect(prompt).toContain('해시태그');
-    expect(prompt).toContain('JSON');
+    expect(prompt).toContain('이미지 가이드');
+    expect(prompt).toContain('50~150자');
   });
 
   it('링크드인 프롬프트가 전문가 톤, 인사이트를 포함해야 한다', () => {
@@ -48,16 +48,16 @@ describe('STEP 4: 채널 재가공 프롬프트', () => {
   it('링크드인 이중언어 옵션이 동작해야 한다', () => {
     const prompt = getRepurposePrompt('linkedin', MOCK_PRESS_RELEASE, { language: 'ko+en' });
     expect(prompt).toContain('한국어');
-    expect(prompt).toContain('English');
+    expect(prompt).toContain('영문');
   });
 
-  it('모든 채널 프롬프트에 공통 규칙(팩트, 의료법, 영문표기)이 있어야 한다', () => {
+  it('모든 채널 프롬프트에 공통 규칙(팩트, 날조금지, 수치계산금지)이 있어야 한다', () => {
     const channels = ['naver-blog', 'kakao', 'instagram', 'linkedin'];
     channels.forEach(ch => {
       const prompt = getRepurposePrompt(ch, MOCK_PRESS_RELEASE);
-      expect(prompt).toContain('팩트만 사용');
-      expect(prompt).toContain('의료법 금지어');
-      expect(prompt).toContain('영문 표기');
+      expect(prompt).toContain('팩트 완전성');
+      expect(prompt).toContain('날조 금지');
+      expect(prompt).toContain('수치 자의 계산 금지');
     });
   });
 
