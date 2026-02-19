@@ -154,8 +154,8 @@ export default function App() {
                 channel: ch,
                 before_text: aiDraft,
                 after_text: finalText,
-                edit_type: 'user_edit_create',
-                edit_pattern: null,
+                edit_type: 'other',
+                edit_pattern: 'user_edit_create',
                 edit_reason: '사용자 직접 수정 (콘텐츠 팩토리)',
               });
             }
