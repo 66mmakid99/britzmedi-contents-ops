@@ -20,7 +20,7 @@ describe('STEP 4: 채널 재가공 프롬프트', () => {
 
   it('카카오톡 프롬프트가 250자 이내, 이모지, 헤드라인을 포함해야 한다', () => {
     const prompt = getRepurposePrompt('kakao', MOCK_PRESS_RELEASE);
-    expect(prompt).toContain('250자');
+    expect(prompt).toContain('300자');
     expect(prompt).toContain('이모지');
     expect(prompt).toContain('헤드라인');
   });

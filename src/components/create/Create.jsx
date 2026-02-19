@@ -876,14 +876,21 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         _reviewMeta: reviewMeta,
         _fixReport: fixReport,
         _reviewData: review,
+        _channelDrafts: {},
+        _channelRawDrafts: {},
       });
     } else {
       // Multi-channel or non-PR
       const drafts = {};
+      const channelRawDrafts = {};
       for (const ch of selectedChannels) {
         const sections = editedSections[ch];
         if (!sections) continue;
         drafts[ch] = ch === 'pressrelease' ? assemblePR(sections, prFixed) : assembleSections(sections);
+        // AI 초안 원본 보존 (edit_distance 계산용)
+        if (v2RawDraftsRef.current[ch]) {
+          channelRawDrafts[ch] = v2RawDraftsRef.current[ch];
+        }
       }
       const firstSections = editedSections[selectedChannels[0]] || [];
       const titleSec = firstSections.find((s) => s.label === '제목' || s.label === '훅' || s.label === '캡션');
@@ -896,6 +903,9 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         channels: selectedChannels.reduce((acc, ch) => ({ ...acc, [ch]: false }), {}),
         date: new Date().toISOString().split('T')[0],
         draft: Object.keys(drafts).length === 1 ? Object.values(drafts)[0] : drafts,
+        _channelDrafts: drafts,
+        _channelRawDrafts: channelRawDrafts,
+        _reviewMeta: reviewMeta,
       });
     }
     setRegistered(true);

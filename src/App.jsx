@@ -23,6 +23,7 @@ import {
   savePressRelease, deletePressRelease as dbDeletePR,
   getAllPressReleases, savePipelineItem, migrateLocalToSupabase,
   updatePressRelease, saveEditHistory, getPressReleaseById,
+  saveChannelContent, updateChannelFinalText,
 } from './lib/supabaseData';
 import { formatReviewReason, formatFixPattern } from './lib/editUtils';
 
@@ -134,6 +135,34 @@ export default function App() {
           edit_pattern: formatFixPattern(fixReport.fixes),
           edit_reason: formatReviewReason(reviewData),
         }).catch(e => console.error('[Phase2-A] edit_history 저장 실패:', e.message));
+      }
+
+      // Phase 2-B: 채널 콘텐츠 edit_distance 학습 루프
+      const channelDrafts = newContent._channelDrafts || {};
+      const channelRawDrafts = newContent._channelRawDrafts || {};
+      for (const [ch, finalText] of Object.entries(channelDrafts)) {
+        if (ch === 'pressrelease') continue; // PR은 위에서 처리
+        try {
+          const savedRow = await saveChannelContent(saved.id, ch, finalText);
+          if (savedRow) {
+            const aiDraft = channelRawDrafts[ch];
+            if (aiDraft && aiDraft !== finalText) {
+              await updateChannelFinalText(savedRow.id, finalText);
+              await saveEditHistory({
+                content_type: 'channel',
+                content_id: savedRow.id,
+                channel: ch,
+                before_text: aiDraft,
+                after_text: finalText,
+                edit_type: 'user_edit_create',
+                edit_pattern: null,
+                edit_reason: '사용자 직접 수정 (콘텐츠 팩토리)',
+              });
+            }
+          }
+        } catch (e) {
+          console.error(`[Phase2-B] ${ch} 채널 저장 실패:`, e.message);
+        }
       }
 
       // Supabase ID로 교체
