@@ -147,7 +147,7 @@ export async function generateChannelContent(contentSource, channelId, options =
   }
   prompt += learningContext;
 
-  const maxTokens = channelId === 'kakao' ? 500
+  const maxTokens = channelId === 'kakao' ? 250
     : channelId === 'instagram' ? 1000
     : channelId === 'naver-blog' ? 3000 : 2000;
   const { text: response, usage } = await callClaudeForChannel(prompt, apiKey, maxTokens);

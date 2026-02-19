@@ -464,6 +464,7 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
               </div>
 
               <ChannelPreview
+                key={activeChannel}
                 channel={REPURPOSE_CHANNELS.find(c => c.id === activeChannel)}
                 content={generatedContents[activeChannel]}
                 images={prImages}

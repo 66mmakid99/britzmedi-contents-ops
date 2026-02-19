@@ -44,6 +44,56 @@ function getCtaText(ctaId, channelId) {
   const desc = opt.id === 'demo' ? '토르RF 데모 체험 신청' : opt.id === 'consult' ? '제품 상담 문의' : '카탈로그 요청';
   return `\n\n${desc}이 필요하시면 아래 링크를 이용해 주세요.\n👉 ${opt.url}`;
 }
+
+// 복수 CTA 텍스트 생성
+function getMultiCtaText(ctaIds, channelId) {
+  if (!ctaIds || !Array.isArray(ctaIds) || ctaIds.length === 0) return '';
+  const filtered = ctaIds.filter(id => id !== 'none');
+  if (filtered.length === 0) return '';
+
+  const ch = channelId || '';
+
+  // 보도자료/홈페이지: 연락처 블록 형태로 합침
+  if (ch === 'pressrelease' || ch === 'homepage') {
+    const lines = filtered.map(id => {
+      const opt = CTA_OPTIONS.find(o => o.id === id);
+      if (!opt) return '';
+      const desc = id === 'demo' ? '토르RF 데모 체험 안내' : id === 'consult' ? '제품 상담 문의 안내' : '카탈로그 요청 안내';
+      return `문의: ${desc}\n${opt.url}`;
+    }).filter(Boolean);
+    return `\n\n—\n브릿츠메디(BRITZMEDI) | 메디컬 에스테틱 디바이스 전문기업\n${lines.join('\n')}\n전화: 070-4489-0701\n이메일: info@britzmedi.co.kr`;
+  }
+
+  // 뉴스레터: 버튼 나열
+  if (ch === 'newsletter') {
+    const items = filtered.map(id => {
+      const opt = CTA_OPTIONS.find(o => o.id === id);
+      if (!opt) return '';
+      return `👉 [${opt.label}하기] ${opt.url}`;
+    }).filter(Boolean);
+    return `\n\n━━━━━━━━━━\n${items.join('\n')}`;
+  }
+
+  // 카카오/인스타: 한줄씩
+  if (ch === 'kakao' || ch === 'instagram') {
+    const items = filtered.map(id => {
+      const opt = CTA_OPTIONS.find(o => o.id === id);
+      if (!opt) return '';
+      const desc = id === 'demo' ? '토르RF 데모 체험' : id === 'consult' ? '제품 상담 문의' : '카탈로그 요청';
+      return `👉 ${desc}: ${opt.url}`;
+    }).filter(Boolean);
+    return '\n\n' + items.join('\n');
+  }
+
+  // 네이버/링크드인 등: 텍스트+URL
+  const items = filtered.map(id => {
+    const opt = CTA_OPTIONS.find(o => o.id === id);
+    if (!opt) return '';
+    const desc = id === 'demo' ? '토르RF 데모 체험 신청' : id === 'consult' ? '제품 상담 문의' : '카탈로그 요청';
+    return `👉 ${opt.url}`;
+  }).filter(Boolean);
+  return `\n\n아래 링크를 이용해 주세요.\n${items.join('\n')}`;
+}
 const V2_STEP_INDEX = { input: 0, parsing: 1, confirm: 2, generating: 3, reviewing: 4, fixing: 4, results: 5 };
 
 // =====================================================
@@ -376,7 +426,13 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         /이미지\s*프롬프트/i.test(s.label))
     );
     let text = ch === 'pressrelease' ? assemblePR(filteredSections, prFixed) : assembleTextOnly(filteredSections);
-    text += getCtaText(ctaSelections[ch], ch);
+    const sel = ctaSelections[ch];
+    // 복수 선택 지원: 배열이면 getMultiCtaText, 단일이면 호환용 getCtaText
+    if (Array.isArray(sel)) {
+      text += getMultiCtaText(sel, ch);
+    } else {
+      text += getCtaText(sel, ch);
+    }
     navigator.clipboard?.writeText(text);
     setCopyStatus(ch);
     setTimeout(() => setCopyStatus(''), 2000);
@@ -1232,8 +1288,22 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               handleCopyAll={() => handleCopyAll(activeResultTab)}
               copyStatus={copyStatus === activeResultTab}
               onRegenerate={handleV2Generate}
-              ctaId={ctaSelections[activeResultTab] || 'none'}
-              onCtaChange={(id) => setCtaSelections(prev => ({ ...prev, [activeResultTab]: id }))}
+              ctaId={ctaSelections[activeResultTab] || []}
+              onCtaChange={(id) => {
+                setCtaSelections(prev => {
+                  const current = prev[activeResultTab] || [];
+                  // 배열로 토글
+                  if (Array.isArray(current)) {
+                    if (id === 'none') return { ...prev, [activeResultTab]: [] };
+                    const exists = current.includes(id);
+                    const next = exists ? current.filter(x => x !== id) : [...current, id];
+                    return { ...prev, [activeResultTab]: next };
+                  }
+                  // 이전 호환: 단일 → 배열 전환
+                  if (id === 'none') return { ...prev, [activeResultTab]: [] };
+                  return { ...prev, [activeResultTab]: [id] };
+                });
+              }}
             />
           )}
 
@@ -1450,7 +1520,7 @@ function V2EditorView({ channelId, sections, updateSection, review, isPR, prFixe
     issuesBySection[key].push(issue);
   });
 
-  const ctaPreview = getCtaText(ctaId, channelId);
+  const ctaPreview = Array.isArray(ctaId) ? getMultiCtaText(ctaId, channelId) : getCtaText(ctaId, channelId);
 
   return (
     <div className="bg-white rounded-xl border border-pale overflow-hidden">
@@ -1512,14 +1582,28 @@ function V2EditorView({ channelId, sections, updateSection, review, isPR, prFixe
 }
 
 function CtaSelector({ channelId, ctaId, onCtaChange, ctaPreview }) {
+  // ctaId는 배열 또는 단일값
+  const selectedIds = Array.isArray(ctaId) ? ctaId : (ctaId && ctaId !== 'none' ? [ctaId] : []);
+  const isNone = selectedIds.length === 0;
+
   return (
     <div className="border-t border-pale pt-4 mt-2 space-y-2">
-      <div className="text-[11px] font-semibold text-steel">CTA (행동 유도)</div>
+      <div className="text-[11px] font-semibold text-steel">CTA (행동 유도) — 복수 선택 가능</div>
       <div className="flex gap-1.5 flex-wrap">
-        {CTA_OPTIONS.map(opt => (
+        {/* 없음 버튼 */}
+        <button onClick={() => onCtaChange('none')}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border cursor-pointer transition-colors ${
+            isNone
+              ? 'bg-dark text-white border-dark'
+              : 'bg-white text-steel border-pale hover:bg-snow'
+          }`}>
+          — 없음
+        </button>
+        {/* CTA 옵션들 (none 제외) */}
+        {CTA_OPTIONS.filter(opt => opt.id !== 'none').map(opt => (
           <button key={opt.id} onClick={() => onCtaChange(opt.id)}
             className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border cursor-pointer transition-colors ${
-              ctaId === opt.id
+              selectedIds.includes(opt.id)
                 ? 'bg-dark text-white border-dark'
                 : 'bg-white text-steel border-pale hover:bg-snow'
             }`}>
