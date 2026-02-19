@@ -1167,6 +1167,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
             <div className="flex gap-1.5 overflow-x-auto">
               {selectedChannels.map((ch) => {
                 const cfg = CHANNEL_CONFIGS[ch];
+                if (!cfg) return null;
                 const hasContent = !!v2Content[ch];
                 const fixed = !!v2FixReport[ch];
                 const needsInputCount = v2FixReport[ch]?.needsInput?.length || 0;
@@ -1516,6 +1517,7 @@ function ResultsView({ genResults, selectedChannels, activeResultTab, setActiveR
           <div className="flex gap-1.5 overflow-x-auto">
             {selectedChannels.map((ch) => {
               const cfg = CHANNEL_CONFIGS[ch];
+              if (!cfg) return null;
               const hasError = !!genResults.errors?.[ch];
               const chIssues = reviewResults?.[ch] || [];
               const redCount = chIssues.filter((i) => i.severity === 'red').length;

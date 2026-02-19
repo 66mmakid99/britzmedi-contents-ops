@@ -231,7 +231,7 @@ export const CHANNEL_CONFIGS = {
 - 섹션 구분은 [제목], [본문1] 같은 대괄호 라벨만 사용
 - 굵게, 기울임, 제목 마크다운 기호 일체 사용하지 말 것`,
   },
-  naver: {
+  'naver-blog': {
     name: '📗 네이버 블로그',
     charTarget: '2,500~3,500자',
     formatPrompt: `## 네이버 블로그 포맷 규칙
@@ -435,11 +435,30 @@ export const CHANNEL_CONFIGS = {
 - 일반 텍스트로만 작성
 - 섹션 구분은 [캡션], [이미지 가이드], [해시태그] 같은 대괄호 라벨만 사용`,
   },
+  homepage: {
+    name: '🌐 홈페이지',
+    charTarget: '500~1,500자',
+    formatPrompt: `## 홈페이지 웹 콘텐츠 포맷 규칙
+- ⛔ 본문 첫 줄에 "홈페이지" 같은 채널명 라벨을 절대 넣지 마세요. 라벨 없이 바로 [제목] 섹션부터 시작하세요.
+- 톤: 전문적이고 신뢰감 있는 3인칭 기업 시점 (~합니다, ~했습니다)
+- 분량: 500~1,500자
+- 구조:
+  [제목] SEO 고려한 한글 제목 (60자 이내)
+  [본문] 첫 문단 핵심 요약 → 배경 → 의미 → 전망 순
+  [SEO 키워드] 쉼표 구분 5~8개
+- 글로벌 오디언스 고려 — 영문 키워드 자연스럽게 혼용
+- "뷰티 디바이스" 표현 금지 → "전문 의료기기" 또는 "Medical Device" 사용
+
+⚠️ 출력 형식 규칙 (필수):
+- 마크다운 문법(**, ##, ###, ---, *, > 등) 절대 사용 금지
+- 일반 텍스트로만 작성
+- 섹션 구분은 [제목], [본문], [SEO 키워드] 같은 대괄호 라벨만 사용`,
+  },
 };
 
 // Channels available in normal factory vs from-PR mode
-export const FACTORY_CHANNELS = ['newsletter', 'naver', 'kakao', 'pressrelease'];
-export const PR_DERIVED_CHANNELS = ['newsletter', 'naver', 'kakao', 'linkedin', 'instagram'];
+export const FACTORY_CHANNELS = ['newsletter', 'naver-blog', 'kakao', 'pressrelease'];
+export const PR_DERIVED_CHANNELS = ['newsletter', 'naver-blog', 'kakao', 'linkedin', 'instagram'];
 
 // =====================================================
 // PR Categories & Boilerplate for Factory v2
@@ -699,7 +718,7 @@ ${prText}
 const CHANNEL_SPECIFIC_RULES = {
   pressrelease: '- 5단 역피라미드 구조(리드→배경→구체→의미+인용→마무리)를 따르는가?\n- [회사 소개] 보일러플레이트 섹션이 포함되어 있는가? 없으면 red "회사 소개 누락"\n- 인용문이 본문 4단락에 직접 포함되어 있는가? 별도 섹션이면 red "인용문 별도 섹션"\n- [QUOTE_PLACEHOLDER] 등 플레이스홀더 노출 시 red "플레이스홀더 노출"\n- 보일러플레이트(설립연도, 소재지)가 본문 2단락에 중복되면 yellow "보일러플레이트 본문 중복"\n- 기계적 접속사(한편, 또한, 아울러) 2회 이상이면 yellow "기계적 접속사 과다"\n- 리드문이 "메디컬 에스테틱 디바이스 전문기업 브릿츠메디(대표 이신재)는..."으로 시작하는가?',
   newsletter: '- CTA(행동 유도 문구) 섹션이 포함되어 있는가? 없으면 red "CTA 누락"',
-  naver: '- 태그가 8~12개 포함되어 있는가? 부족하면 yellow "태그 부족"\n- SEO 키워드가 제목 앞부분에 배치되었는가?\n- [IMAGE:] 위치 표시가 본문에 있는가?',
+  'naver-blog': '- 태그가 8~12개 포함되어 있는가? 부족하면 yellow "태그 부족"\n- SEO 키워드가 제목 앞부분에 배치되었는가?\n- [IMAGE:] 위치 표시가 본문에 있는가?',
   kakao: '- 150~300자 범위인가? 범위 밖이면 yellow "분량 초과/부족"\n- 설문 데이터가 사용되면 red "카카오 채널에서 설문 데이터 금지"\n- [카드1], [카드2] 같은 구조 태그가 출력되면 red "카드뉴스 구조 태그 금지"\n- "뷰티 디바이스"가 사용되면 red "뷰티 디바이스 금지 → 전문 의료기기"',
   linkedin: '- 해시태그 5~8개 포함되어 있는가? 없으면 yellow "해시태그 누락"\n- 훅이 존재하는가? 없으면 yellow "훅 누락"',
   instagram: '- 해시태그 15~20개 포함되어 있는가? 부족하면 yellow "해시태그 부족" / 23개 이상이면 yellow "해시태그 과다(스팸)"\n- 캡션이 50~150자 범위인가?\n- 설문 데이터가 사용되면 red "인스타그램에서 설문 데이터 금지"\n- [캐러셀1], [슬라이드1] 같은 구조 태그가 출력되면 red "캐러셀 구조 태그 금지"\n- "뷰티 디바이스"가 사용되면 red "뷰티 디바이스 금지 → 전문 의료기기"',

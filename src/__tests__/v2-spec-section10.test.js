@@ -331,7 +331,7 @@ describe('TEST-7: 채널 재가공 — from-PR 플로우', () => {
   const prText = `[제목]\n브릿츠메디, AMWC Monaco 참가\n\n[본문]\n메디컬 에스테틱 전문기업 브릿츠메디가 AMWC에 참가했다.`;
 
   it('buildFromPRPrompt: 유효한 채널에 대해 프롬프트 생성', () => {
-    const channels = ['newsletter', 'naver', 'kakao', 'linkedin', 'instagram'];
+    const channels = ['newsletter', 'naver-blog', 'kakao', 'linkedin', 'instagram'];
     for (const ch of channels) {
       const prompt = buildFromPRPrompt({ prText, channelId: ch });
       expect(prompt.length).toBeGreaterThan(100);
@@ -354,7 +354,7 @@ describe('TEST-7: 채널 재가공 — from-PR 플로우', () => {
   });
 
   it('buildFromPRPrompt: 마크다운 금지 규칙 포함', () => {
-    const prompt = buildFromPRPrompt({ prText, channelId: 'naver' });
+    const prompt = buildFromPRPrompt({ prText, channelId: 'naver-blog' });
     expect(prompt).toContain('마크다운 문법');
     expect(prompt).toContain('절대 사용 금지');
   });
@@ -362,7 +362,7 @@ describe('TEST-7: 채널 재가공 — from-PR 플로우', () => {
   it('PR_DERIVED_CHANNELS 정의 확인', async () => {
     const { PR_DERIVED_CHANNELS } = await import('../constants/prompts.js');
     expect(PR_DERIVED_CHANNELS).toContain('newsletter');
-    expect(PR_DERIVED_CHANNELS).toContain('naver');
+    expect(PR_DERIVED_CHANNELS).toContain('naver-blog');
     expect(PR_DERIVED_CHANNELS).toContain('kakao');
     expect(PR_DERIVED_CHANNELS).toContain('linkedin');
     expect(PR_DERIVED_CHANNELS).toContain('instagram');
