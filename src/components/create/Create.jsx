@@ -14,6 +14,36 @@ import GeneralContentForm from './GeneralContentForm';
 
 // v2 step labels for the stepper
 const V2_STEP_LABELS = ['입력', '파싱', '팩트 확인', '생성', '검수/수정', '결과'];
+
+// CTA options
+const CTA_OPTIONS = [
+  { id: 'none', label: '없음', icon: '—' },
+  { id: 'demo', label: '데모 신청', icon: '🎯', url: 'https://britzmedi.co.kr/contact?type=demo' },
+  { id: 'consult', label: '제품 상담', icon: '💬', url: 'https://britzmedi.co.kr/contact?type=consult' },
+  { id: 'catalog', label: '자료 요청', icon: '📄', url: 'https://britzmedi.co.kr/contact?type=catalog' },
+];
+
+function getCtaText(ctaId, channelId) {
+  if (ctaId === 'none' || !ctaId) return '';
+  const opt = CTA_OPTIONS.find(o => o.id === ctaId);
+  if (!opt) return '';
+
+  const ch = channelId || '';
+  if (ch === 'pressrelease' || ch === 'homepage') {
+    return `\n\n—\n브릿츠메디(BRITZMEDI) | 메디컬 에스테틱 디바이스 전문기업\n문의: ${opt.id === 'demo' ? '토르RF 데모 체험 안내' : opt.id === 'consult' ? '제품 상담 문의 안내' : '카탈로그 요청 안내'}\n전화: 070-4489-0701\n이메일: info@britzmedi.co.kr\n${opt.url}`;
+  }
+  if (ch === 'newsletter') {
+    const desc = opt.id === 'demo' ? '토르RF 데모를 직접 체험해 보세요' : opt.id === 'consult' ? '제품에 대해 궁금하신 점을 문의하세요' : '제품 카탈로그를 요청하세요';
+    return `\n\n━━━━━━━━━━\n${desc}\n👉 [${opt.label}하기] ${opt.url}`;
+  }
+  if (ch === 'kakao' || ch === 'instagram') {
+    const desc = opt.id === 'demo' ? '토르RF 데모 체험' : opt.id === 'consult' ? '제품 상담 문의' : '카탈로그 요청';
+    return `\n\n👉 ${desc}: ${opt.url}`;
+  }
+  // naver-blog, linkedin, etc.
+  const desc = opt.id === 'demo' ? '토르RF 데모 체험 신청' : opt.id === 'consult' ? '제품 상담 문의' : '카탈로그 요청';
+  return `\n\n${desc}이 필요하시면 아래 링크를 이용해 주세요.\n👉 ${opt.url}`;
+}
 const V2_STEP_INDEX = { input: 0, parsing: 1, confirm: 2, generating: 3, reviewing: 4, fixing: 4, results: 5 };
 
 // =====================================================
@@ -252,6 +282,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   const [copyStatus, setCopyStatus] = useState('');
   const [registered, setRegistered] = useState(false);
   const [activeResultTab, setActiveResultTab] = useState('');
+  const [ctaSelections, setCtaSelections] = useState({});
 
   // --- From-PR mode state ---
   const [loading, setLoading] = useState(false);
@@ -332,7 +363,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
   };
   const updatePrFixed = (key, val) => setPrFixed((prev) => ({ ...prev, [key]: val }));
 
-  // --- Copy all (라벨 제외, 사진/첨부가이드 제외) ---
+  // --- Copy all (라벨 제외, 사진/첨부가이드 제외, CTA 포함) ---
   const handleCopyAll = (ch) => {
     const sections = editedSections[ch];
     if (!sections) return;
@@ -344,7 +375,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
         /이미지\s*생성\s*프롬프트/i.test(s.label) ||
         /이미지\s*프롬프트/i.test(s.label))
     );
-    const text = ch === 'pressrelease' ? assemblePR(filteredSections, prFixed) : assembleTextOnly(filteredSections);
+    let text = ch === 'pressrelease' ? assemblePR(filteredSections, prFixed) : assembleTextOnly(filteredSections);
+    text += getCtaText(ctaSelections[ch], ch);
     navigator.clipboard?.writeText(text);
     setCopyStatus(ch);
     setTimeout(() => setCopyStatus(''), 2000);
@@ -360,6 +392,7 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
     setCopyStatus('');
     setRegistered(false);
     setActiveResultTab('');
+    setCtaSelections({});
 
     if (isFromPR) {
       setLoading(false);
@@ -1199,6 +1232,8 @@ export default function Create({ onAdd, apiKey, setApiKey, prSourceData, onClear
               handleCopyAll={() => handleCopyAll(activeResultTab)}
               copyStatus={copyStatus === activeResultTab}
               onRegenerate={handleV2Generate}
+              ctaId={ctaSelections[activeResultTab] || 'none'}
+              onCtaChange={(id) => setCtaSelections(prev => ({ ...prev, [activeResultTab]: id }))}
             />
           )}
 
@@ -1406,7 +1441,7 @@ function NeedsInputItem({ item, onApply }) {
   );
 }
 
-function V2EditorView({ channelId, sections, updateSection, review, isPR, prFixed, updatePrFixed, handleCopyAll, copyStatus, onRegenerate }) {
+function V2EditorView({ channelId, sections, updateSection, review, isPR, prFixed, updatePrFixed, handleCopyAll, copyStatus, onRegenerate, ctaId, onCtaChange }) {
   const issues = review?.issues || [];
   const issuesBySection = {};
   issues.forEach((issue) => {
@@ -1414,6 +1449,8 @@ function V2EditorView({ channelId, sections, updateSection, review, isPR, prFixe
     if (!issuesBySection[key]) issuesBySection[key] = [];
     issuesBySection[key].push(issue);
   });
+
+  const ctaPreview = getCtaText(ctaId, channelId);
 
   return (
     <div className="bg-white rounded-xl border border-pale overflow-hidden">
@@ -1461,6 +1498,8 @@ function V2EditorView({ channelId, sections, updateSection, review, isPR, prFixe
           </>
         )}
 
+        <CtaSelector channelId={channelId} ctaId={ctaId} onCtaChange={onCtaChange} ctaPreview={ctaPreview} />
+
         <button onClick={handleCopyAll}
           className={`w-full py-3 rounded-lg text-[14px] font-bold border-none cursor-pointer transition-colors ${
             copyStatus ? 'bg-success text-white' : 'bg-dark text-white hover:bg-charcoal'
@@ -1468,6 +1507,32 @@ function V2EditorView({ channelId, sections, updateSection, review, isPR, prFixe
           {copyStatus ? '전체 복사 완료 ✓' : `전체 복사 — ${CHANNEL_CONFIGS[channelId]?.name}`}
         </button>
       </div>
+    </div>
+  );
+}
+
+function CtaSelector({ channelId, ctaId, onCtaChange, ctaPreview }) {
+  return (
+    <div className="border-t border-pale pt-4 mt-2 space-y-2">
+      <div className="text-[11px] font-semibold text-steel">CTA (행동 유도)</div>
+      <div className="flex gap-1.5 flex-wrap">
+        {CTA_OPTIONS.map(opt => (
+          <button key={opt.id} onClick={() => onCtaChange(opt.id)}
+            className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border cursor-pointer transition-colors ${
+              ctaId === opt.id
+                ? 'bg-dark text-white border-dark'
+                : 'bg-white text-steel border-pale hover:bg-snow'
+            }`}>
+            {opt.icon} {opt.label}
+          </button>
+        ))}
+      </div>
+      {ctaPreview && (
+        <div className="bg-snow rounded-lg p-3 text-[12px] text-slate whitespace-pre-wrap leading-relaxed">
+          <div className="text-[10px] text-mist mb-1">미리보기 (전체 복사 시 포함)</div>
+          {ctaPreview.trim()}
+        </div>
+      )}
     </div>
   );
 }
