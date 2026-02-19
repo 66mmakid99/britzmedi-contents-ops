@@ -19,7 +19,7 @@ import { DEFAULT_KB_ENTRIES } from './constants/knowledgeBase';
 import {
   savePressRelease, deletePressRelease as dbDeletePR,
   getAllPressReleases, savePipelineItem, migrateLocalToSupabase,
-  updatePressRelease, saveEditHistory,
+  updatePressRelease, saveEditHistory, getPressReleaseById,
 } from './lib/supabaseData';
 import { formatReviewReason, formatFixPattern } from './lib/editUtils';
 
@@ -248,7 +248,22 @@ export default function App() {
             contentSource={repurposeSource}
             apiKey={apiKey}
             contents={contents}
-            onSelectPR={(item) => setRepurposeSource({ type: 'press_release', ...item })}
+            onSelectPR={async (item) => {
+              let body = item.draft || item.body || '';
+              // 본문이 비어있으면 Supabase에서 직접 조회
+              if (!body && item.id) {
+                const fresh = await getPressReleaseById(item.id);
+                if (fresh) {
+                  body = fresh.press_release || fresh.final_text || fresh.ai_draft || '';
+                }
+              }
+              setRepurposeSource({
+                type: 'press_release',
+                ...item,
+                body,
+                draft: body,
+              });
+            }}
             tracker={trackerRef.current}
             onTokenUpdate={handleTokenUpdate}
           />
