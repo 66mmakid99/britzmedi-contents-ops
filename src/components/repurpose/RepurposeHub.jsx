@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { REPURPOSE_CHANNELS, REPURPOSE_STATUS } from '../../constants/channels';
 import ChannelPreview from './ChannelPreview';
 import { generateChannelContent, reviewChannelContent, autoFixChannelContent } from '../../lib/channelGenerate';
-import { saveChannelContent, saveEditHistory, channelToDb } from '../../lib/supabaseData';
+import { saveChannelContent, saveEditHistory, channelToDb, updateChannelFinalText } from '../../lib/supabaseData';
 import { getPressReleaseImages } from '../../lib/imageUpload';
 import { calculateEditMetrics, formatReviewReason, formatFixPattern } from '../../lib/editUtils';
 
@@ -25,6 +25,11 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
 
   // Phase 2-C: 수정 포인트
   const [editPoints, setEditPoints] = useState({});
+
+  // DB row ID 추적 (updateChannelFinalText 호출용)
+  const savedRowIdsRef = useRef({});
+  // 사용자 편집 디바운스 타이머
+  const editTimerRef = useRef({});
 
   // Part 0: 재생성 로딩 표시
   const [regenerating, setRegenerating] = useState(null);
@@ -112,9 +117,18 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
             // ai_draft로 초안 저장
             const savedRow = await saveChannelContent(contentSource.id, channelId, rawText);
 
-            // 보정이 있었으면 edit_history 저장
+            // DB row ID 저장 (나중에 사용자 편집 시 updateChannelFinalText 호출용)
+            if (savedRow?.id) {
+              savedRowIdsRef.current[channelId] = savedRow.id;
+            }
+
+            // 보정이 있었으면 final_text 업데이트 + edit_history 저장
             const finalText = fixResult?.fixedContent || rawText;
             if (savedRow?.id && rawText !== finalText) {
+              // final_text 업데이트 + edit_distance/edit_ratio 계산
+              await updateChannelFinalText(savedRow.id, finalText);
+              console.log(`[Phase2-B] final_text 업데이트: ${channelId}`);
+
               const { editDistance, editRatio } = calculateEditMetrics(rawText, finalText);
 
               await saveEditHistory({
@@ -198,6 +212,12 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
         (async () => {
           try {
             const savedRow = await saveChannelContent(contentSource.id, channelId, afterText);
+
+            // DB row ID 저장
+            if (savedRow?.id) {
+              savedRowIdsRef.current[channelId] = savedRow.id;
+            }
+
             if (savedRow?.id) {
               await saveEditHistory({
                 content_type: 'channel',
@@ -448,8 +468,25 @@ export default function RepurposeHub({ contentSource, apiKey, contents, onSelect
                 content={generatedContents[activeChannel]}
                 images={prImages}
                 onEdit={(updated) => {
-                  setGeneratedContents(prev => ({ ...prev, [activeChannel]: updated }));
-                  setChannelStates(prev => ({ ...prev, [activeChannel]: REPURPOSE_STATUS.EDITING }));
+                  const channelId = activeChannel;
+                  setGeneratedContents(prev => ({ ...prev, [channelId]: updated }));
+                  setChannelStates(prev => ({ ...prev, [channelId]: REPURPOSE_STATUS.EDITING }));
+
+                  // 디바운스: 사용자가 타이핑을 멈춘 후 2초 뒤에 DB 저장
+                  if (editTimerRef.current[channelId]) {
+                    clearTimeout(editTimerRef.current[channelId]);
+                  }
+                  editTimerRef.current[channelId] = setTimeout(async () => {
+                    const rowId = savedRowIdsRef.current[channelId];
+                    if (!rowId) return;
+                    const finalText = updated?.body || updated?.caption || '';
+                    try {
+                      await updateChannelFinalText(rowId, finalText);
+                      console.log(`[사용자편집] final_text DB 저장: ${channelId} (${finalText.length}자)`);
+                    } catch (e) {
+                      console.error(`[사용자편집] DB 저장 실패: ${channelId}`, e.message);
+                    }
+                  }, 2000);
                 }}
               />
             </div>
