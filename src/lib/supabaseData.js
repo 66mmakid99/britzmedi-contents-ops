@@ -299,9 +299,24 @@ export async function deleteChannelContent(id) {
 // edit_history
 // =====================================================
 
+// DB edit_history_edit_type_check 제약에 허용된 값
+const VALID_EDIT_TYPES = new Set([
+  'tone_change', 'fact_correction', 'term_replacement', 'structure_change',
+  'addition', 'deletion', 'style_polish', 'other',
+  'auto_review', 'auto_channel_review', 'manual_regenerate',
+]);
+
 export async function saveEditHistory(data) {
   if (!supabase) return null;
   try {
+    // DB 제약에 없는 edit_type은 'other'로 폴백, 원래 값은 edit_pattern에 보존
+    let editType = data.edit_type || 'other';
+    let editPattern = data.edit_pattern || null;
+    if (!VALID_EDIT_TYPES.has(editType)) {
+      editPattern = editPattern ? `${editType} | ${editPattern}` : editType;
+      editType = 'other';
+    }
+
     const { data: row, error } = await supabase
       .from('edit_history')
       .insert({
@@ -310,8 +325,8 @@ export async function saveEditHistory(data) {
         channel: data.channel || null,
         before_text: data.before_text || null,
         after_text: data.after_text || null,
-        edit_type: data.edit_type || 'other',
-        edit_pattern: data.edit_pattern || null,
+        edit_type: editType,
+        edit_pattern: editPattern,
         edit_reason: data.edit_reason || null,
       })
       .select()
