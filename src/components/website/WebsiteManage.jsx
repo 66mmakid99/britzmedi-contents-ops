@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getWebsitePosts, saveWebsitePost, deleteWebsitePost, getWebsiteStats } from '../../lib/supabaseAdmin';
+import { publishToBlog, publishToNews, triggerCokrDeploy } from '../../lib/publishToCokr';
 
 const POST_CATEGORIES = [
   { id: 'news', label: '뉴스', emoji: '📰' },
@@ -73,6 +74,28 @@ export default function WebsiteManage({ showToast }) {
     loadData();
   }
 
+  // co.kr 블로그로 발행
+  async function handlePublishToCokr(post, target = 'blog') {
+    const fn = target === 'news' ? publishToNews : publishToBlog;
+    const result = await fn(post);
+    if (result.success) {
+      showToast?.(`co.kr ${target === 'news' ? '뉴스' : '블로그'}에 발행 완료 (slug: ${result.slug})`);
+      loadData();
+    } else {
+      showToast?.(`발행 실패: ${result.reason}`, 'error');
+    }
+  }
+
+  // Deploy Hook만 수동 트리거
+  async function handleTriggerDeploy() {
+    const result = await triggerCokrDeploy('manual');
+    if (result.success) {
+      showToast?.('co.kr 재빌드가 트리거되었습니다');
+    } else {
+      showToast?.(`재빌드 트리거 실패: ${result.reason}`, 'error');
+    }
+  }
+
   const tabs = [
     { id: 'posts', label: '콘텐츠 목록' },
     { id: 'seo', label: 'SEO 현황' },
@@ -123,6 +146,8 @@ export default function WebsiteManage({ showToast }) {
           onEdit={openEditor}
           onDelete={handleDelete}
           onPublish={handlePublish}
+          onPublishToCokr={handlePublishToCokr}
+          onTriggerDeploy={handleTriggerDeploy}
         />
       )}
 
@@ -144,11 +169,20 @@ export default function WebsiteManage({ showToast }) {
 // 포스트 목록
 // =====================================================
 
-function PostList({ posts, loading, filter, setFilter, onEdit, onDelete, onPublish }) {
+function PostList({ posts, loading, filter, setFilter, onEdit, onDelete, onPublish, onPublishToCokr, onTriggerDeploy }) {
+  const [publishingId, setPublishingId] = useState(null);
+
+  async function handleCokrPublish(post, target) {
+    setPublishingId(post.id + '-' + target);
+    await onPublishToCokr(post, target);
+    setPublishingId(null);
+  }
+
   return (
     <div className="space-y-3">
-      {/* 필터 */}
-      <div className="flex gap-2 flex-wrap">
+      {/* 재빌드 버튼 + 필터 */}
+      <div className="flex gap-2 flex-wrap items-center justify-between">
+        <div className="flex gap-2 flex-wrap">
         <select
           value={filter.status}
           onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}
@@ -169,6 +203,13 @@ function PostList({ posts, loading, filter, setFilter, onEdit, onDelete, onPubli
             <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
           ))}
         </select>
+        </div>
+        <button
+          onClick={onTriggerDeploy}
+          className="text-[11px] px-3 py-1.5 bg-accent/15 text-accent rounded-lg border-none cursor-pointer hover:bg-accent/25 font-medium"
+        >
+          co.kr 재빌드
+        </button>
       </div>
 
       {/* 테이블 */}
@@ -214,7 +255,7 @@ function PostList({ posts, loading, filter, setFilter, onEdit, onDelete, onPubli
                     {p.published_at ? new Date(p.published_at).toLocaleDateString('ko') : new Date(p.created_at).toLocaleDateString('ko')}
                   </td>
                   <td className="p-3 text-center">
-                    <div className="flex gap-1 justify-center">
+                    <div className="flex gap-1 justify-center flex-wrap">
                       {p.status === 'draft' && (
                         <button
                           onClick={() => onPublish(p)}
@@ -223,6 +264,22 @@ function PostList({ posts, loading, filter, setFilter, onEdit, onDelete, onPubli
                           발행
                         </button>
                       )}
+                      <button
+                        onClick={() => handleCokrPublish(p, 'blog')}
+                        disabled={publishingId === p.id + '-blog'}
+                        className="text-[11px] px-2 py-1 bg-accent/15 text-accent rounded border-none cursor-pointer hover:bg-accent/25 disabled:opacity-50"
+                        title="co.kr 블로그에 발행"
+                      >
+                        {publishingId === p.id + '-blog' ? '...' : 'Blog'}
+                      </button>
+                      <button
+                        onClick={() => handleCokrPublish(p, 'news')}
+                        disabled={publishingId === p.id + '-news'}
+                        className="text-[11px] px-2 py-1 bg-accent/15 text-accent rounded border-none cursor-pointer hover:bg-accent/25 disabled:opacity-50"
+                        title="co.kr 뉴스에 발행"
+                      >
+                        {publishingId === p.id + '-news' ? '...' : 'News'}
+                      </button>
                       <button
                         onClick={() => onEdit(p)}
                         className="text-[11px] px-2 py-1 bg-info/15 text-info rounded border-none cursor-pointer hover:bg-info/25"
