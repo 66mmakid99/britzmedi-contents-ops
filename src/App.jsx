@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import GoRedirect from './components/GoRedirect';
-import Header from './components/layout/Header';
-import BottomNav from './components/layout/BottomNav';
+import Sidebar, { isPlaceholderPage } from './components/layout/Sidebar';
+import TopBar from './components/layout/TopBar';
+import PlaceholderPage from './components/layout/PlaceholderPage';
 import Toast from './components/layout/Toast';
 import ContentModal from './components/layout/ContentModal';
 import TokenUsageBadge from './components/layout/TokenUsageBadge';
@@ -72,6 +73,8 @@ function AuthGate() {
 }
 
 function AppMain() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [activePage, setActivePage] = useState('dashboard');
   const [contents, setContents] = useLocalStorage('bm-contents', DEMO_CONTENTS);
@@ -268,40 +271,23 @@ function AppMain() {
     setActivePage('repurpose');
   };
 
-  return (
-    <div className="min-h-screen bg-snow font-sans pb-[72px] md:pb-0">
-      <Header activePage={activePage} setActivePage={setActivePage} />
+  const renderPage = () => {
+    // placeholder 메뉴
+    if (isPlaceholderPage(activePage)) {
+      return <PlaceholderPage pageId={activePage} />;
+    }
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
-
-      {modalContent && (
-        <ContentModal
-          content={modalContent}
-          onClose={() => setModalContent(null)}
-          onSave={handleSaveContent}
-          onDelete={handleDeleteContent}
-        />
-      )}
-
-      <main className="max-w-[1200px] mx-auto p-3 md:p-6">
-        {activePage === 'dashboard' && (
-          <Dashboard contents={contents} onOpenContent={setModalContent} setActivePage={setActivePage} />
-        )}
-        {activePage === 'calendar' && (
-          <Calendar contents={contents} onOpenContent={setModalContent} />
-        )}
-        {activePage === 'pipeline' && (
-          <Pipeline
-            contents={contents}
-            setContents={setContents}
-            onOpenContent={setModalContent}
-            onCreateFromPR={handleCreateFromPR}
-          />
-        )}
-        {activePage === 'publish' && (
-          <Publish contents={contents} setContents={setContents} onOpenContent={setModalContent} />
-        )}
-        {activePage === 'create' && (
+    switch (activePage) {
+      case 'dashboard':
+        return <Dashboard contents={contents} onOpenContent={setModalContent} setActivePage={setActivePage} />;
+      case 'calendar':
+        return <Calendar contents={contents} onOpenContent={setModalContent} />;
+      case 'pipeline':
+        return <Pipeline contents={contents} setContents={setContents} onOpenContent={setModalContent} onCreateFromPR={handleCreateFromPR} />;
+      case 'publish':
+        return <Publish contents={contents} setContents={setContents} onOpenContent={setModalContent} />;
+      case 'create':
+        return (
           <Create
             onAdd={handleAddContent}
             apiKey={apiKey}
@@ -314,48 +300,72 @@ function AppMain() {
             tracker={trackerRef.current}
             onTokenUpdate={handleTokenUpdate}
           />
-        )}
-        {activePage === 'repurpose' && (
+        );
+      case 'repurpose':
+        return (
           <RepurposeHub
             contentSource={repurposeSource}
             apiKey={apiKey}
             contents={contents}
             onSelectPR={async (item) => {
               let body = item.draft || item.body || '';
-              // 본문이 비어있으면 Supabase에서 직접 조회
               if (!body && item.id) {
                 const fresh = await getPressReleaseById(item.id);
                 if (fresh) {
                   body = fresh.press_release || fresh.final_text || fresh.ai_draft || '';
                 }
               }
-              setRepurposeSource({
-                type: 'press_release',
-                ...item,
-                body,
-                draft: body,
-              });
+              setRepurposeSource({ type: 'press_release', ...item, body, draft: body });
             }}
             tracker={trackerRef.current}
             onTokenUpdate={handleTokenUpdate}
           />
-        )}
-        {activePage === 'knowledge' && (
-          <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} apiKey={apiKey} setApiKey={setApiKey} showToast={showToast} tracker={trackerRef.current} onTokenUpdate={handleTokenUpdate} />
-        )}
-        {activePage === 'website' && (
-          <WebsiteManage showToast={showToast} />
-        )}
-        {activePage === 'chatbot' && (
-          <ChatbotManage showToast={showToast} />
-        )}
-        {activePage === 'leads' && (
-          <LeadManage showToast={showToast} />
-        )}
-        <TokenUsageBadge summary={tokenSummary} />
-      </main>
+        );
+      case 'knowledge':
+        return <KnowledgeBase entries={kbEntries} setEntries={setKbEntries} apiKey={apiKey} setApiKey={setApiKey} showToast={showToast} tracker={trackerRef.current} onTokenUpdate={handleTokenUpdate} />;
+      case 'website':
+        return <WebsiteManage showToast={showToast} />;
+      case 'chatbot':
+        return <ChatbotManage showToast={showToast} />;
+      case 'leads':
+        return <LeadManage showToast={showToast} />;
+      default:
+        return <Dashboard contents={contents} onOpenContent={setModalContent} setActivePage={setActivePage} />;
+    }
+  };
 
-      <BottomNav activePage={activePage} setActivePage={setActivePage} />
+  return (
+    <div className="min-h-screen bg-[#f5f5f5] font-sans">
+      {/* 사이드바 */}
+      <Sidebar
+        activePage={activePage}
+        setActivePage={setActivePage}
+        collapsed={sidebarCollapsed}
+        setCollapsed={setSidebarCollapsed}
+        mobileOpen={mobileMenuOpen}
+        setMobileOpen={setMobileMenuOpen}
+      />
+
+      {/* 메인 영역 */}
+      <div className={`min-h-screen transition-all duration-200 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-[250px]'}`}>
+        <TopBar activePage={activePage} onMenuClick={() => setMobileMenuOpen(true)} />
+
+        <Toast toast={toast} onClose={() => setToast(null)} />
+
+        {modalContent && (
+          <ContentModal
+            content={modalContent}
+            onClose={() => setModalContent(null)}
+            onSave={handleSaveContent}
+            onDelete={handleDeleteContent}
+          />
+        )}
+
+        <main className="p-4 md:p-6">
+          {renderPage()}
+          <TokenUsageBadge summary={tokenSummary} />
+        </main>
+      </div>
     </div>
   );
 }
