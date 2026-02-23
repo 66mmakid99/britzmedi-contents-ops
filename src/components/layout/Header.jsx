@@ -1,6 +1,9 @@
 import { NAV_ITEMS } from '../../constants';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function Header({ activePage, setActivePage }) {
+  const { user, signOut, isBypass } = useAuth();
+
   return (
     <header className="bg-white border-b border-pale sticky top-0 z-50">
       <div className="max-w-[1200px] mx-auto px-6 h-[60px] flex items-center justify-between">
@@ -16,25 +19,41 @@ export default function Header({ activePage, setActivePage }) {
             CONTENT OPS
           </div>
         </div>
-        <nav className="hidden md:flex gap-0.5 items-center">
-          {NAV_ITEMS.map((item, idx) => (
-            <div key={item.id} className="flex items-center gap-0.5">
-              {idx > 0 && item.group === 'admin' && NAV_ITEMS[idx - 1]?.group !== 'admin' && (
-                <div className="w-px h-4 bg-silver mx-1" />
-              )}
+        <div className="hidden md:flex items-center gap-1">
+          <nav className="flex gap-0.5 items-center">
+            {NAV_ITEMS.map((item, idx) => (
+              <div key={item.id} className="flex items-center gap-0.5">
+                {idx > 0 && item.group === 'admin' && NAV_ITEMS[idx - 1]?.group !== 'admin' && (
+                  <div className="w-px h-4 bg-silver mx-1" />
+                )}
+                <button
+                  onClick={() => setActivePage(item.id)}
+                  className={`px-3 py-2 rounded-lg text-[12px] border-none cursor-pointer transition-colors ${
+                    activePage === item.id
+                      ? 'bg-dark text-white font-bold'
+                      : 'bg-transparent text-slate hover:bg-pale font-normal'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              </div>
+            ))}
+          </nav>
+          {!isBypass && user && (
+            <>
+              <div className="w-px h-4 bg-silver mx-2" />
+              <span className="text-[11px] text-mist truncate max-w-[120px]" title={user.email}>
+                {user.email}
+              </span>
               <button
-                onClick={() => setActivePage(item.id)}
-                className={`px-3 py-2 rounded-lg text-[12px] border-none cursor-pointer transition-colors ${
-                  activePage === item.id
-                    ? 'bg-dark text-white font-bold'
-                    : 'bg-transparent text-slate hover:bg-pale font-normal'
-                }`}
+                onClick={signOut}
+                className="text-[11px] text-steel hover:text-dark px-2 py-1 rounded border-none bg-transparent cursor-pointer transition-colors"
               >
-                {item.label}
+                로그아웃
               </button>
-            </div>
-          ))}
-        </nav>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -26,12 +26,52 @@ import {
   saveChannelContent, updateChannelFinalText,
 } from './lib/supabaseData';
 import { formatReviewReason, formatFixPattern } from './lib/editUtils';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Login from './pages/Login';
 
 export default function App() {
-  // /go 경로: CTA 추적 리다이렉트 전용 페이지
+  // /go 경로: CTA 추적 리다이렉트 전용 페이지 (인증 불필요)
   if (window.location.pathname === '/go') {
     return <GoRedirect />;
   }
+
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
+}
+
+function AuthGate() {
+  const { isAuthenticated, loading, isBypass } = useAuth();
+
+  // 로딩 중 스피너
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-snow">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-dark border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-[12px] text-steel mt-3">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Supabase 미설정 시 인증 우회 (개발 모드)
+  if (isBypass) {
+    return <AppMain />;
+  }
+
+  // 미인증 → 로그인 페이지
+  if (!isAuthenticated) {
+    return <Login />;
+  }
+
+  // 인증됨 → 메인 앱
+  return <AppMain />;
+}
+
+function AppMain() {
 
   const [activePage, setActivePage] = useState('dashboard');
   const [contents, setContents] = useLocalStorage('bm-contents', DEMO_CONTENTS);
